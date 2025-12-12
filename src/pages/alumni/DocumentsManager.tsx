@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { API_URL } from "@/config/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,42 +7,59 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { Upload, Download, Trash2, File, FileText, Image, Loader2, AlertCircle } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 interface Document {
-  id: string;
+  id: number;
   title: string;
-  fileName: string;
-  fileSize: number;
-  fileType: "cv" | "sertifikat" | "portofolio" | "surat_rekomendasi";
-  uploadedAt: Date;
-  fileUrl?: string;
+  file_name: string;
+  file_size: number;
+  file_type: "cv" | "sertifikat" | "portofolio" | "surat_rekomendasi";
+  created_at: string;
+  file_path: string;
 }
 
 const DocumentsManager = () => {
+  const { user } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
-  const [documents, setDocuments] = useState<Document[]>([
-    {
-      id: "1",
-      title: "CV 2024",
-      fileName: "CV_Ahmad_2024.pdf",
-      fileSize: 245000,
-      fileType: "cv",
-      uploadedAt: new Date("2024-11-15"),
-      fileUrl: "#",
-    },
-    {
-      id: "2",
-      title: "Sertifikat React",
-      fileName: "React_Certificate.pdf",
-      fileSize: 512000,
-      fileType: "sertifikat",
-      uploadedAt: new Date("2024-11-10"),
-      fileUrl: "#",
-    },
-  ]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [selectedType, setSelectedType] = useState<"cv" | "sertifikat" | "portofolio" | "surat_rekomendasi">("cv");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  // Load documents dari API berdasarkan user ID
+  useEffect(() => {
+    if (user?.id) {
+      fetchDocuments();
+    }
+  }, [user?.id]);
+
+  const fetchDocuments = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/documents`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(data);
+      } else {
+        console.error("Failed to fetch documents");
+        setDocuments([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch documents:", error);
+      setDocuments([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const docTypes = [
     { id: "cv", label: "CV", icon: FileText },
@@ -62,7 +80,7 @@ const DocumentsManager = () => {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -72,44 +90,124 @@ const DocumentsManager = () => {
 
     if (file.size > maxSize) {
       toast({ title: "Error", description: "Ukuran file maksimal 5MB", variant: "destructive" });
+      e.target.value = ""; // Reset input
       return;
     }
 
     if (!allowedFormats.includes(file.type)) {
       toast({ title: "Error", description: "Format file harus PDF, DOC, DOCX, JPG, atau PNG", variant: "destructive" });
+      e.target.value = ""; // Reset input
       return;
     }
 
     if (!newTitle.trim()) {
       toast({ title: "Error", description: "Judul dokumen harus diisi", variant: "destructive" });
+      e.target.value = ""; // Reset input
       return;
     }
 
-    // Simulate upload
+    // Upload ke API
     setIsUploading(true);
-    setTimeout(() => {
-      const newDoc: Document = {
-        id: Date.now().toString(),
+    try {
+      const formData = new FormData();
+      formData.append("title", newTitle);
+      formData.append("file_type", selectedType);
+      formData.append("file", file);
+
+      console.log("Uploading document:", {
         title: newTitle,
+        type: selectedType,
         fileName: file.name,
         fileSize: file.size,
-        fileType: selectedType,
-        uploadedAt: new Date(),
-      };
-      setDocuments([...documents, newDoc]);
-      setNewTitle("");
+        fileType: file.type,
+      });
+
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/documents`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: formData,
+      });
+
+      console.log("Upload response status:", response.status);
+
+      if (response.ok) {
+        const newDoc = await response.json();
+        console.log("Upload successful:", newDoc);
+        setDocuments([newDoc, ...documents]);
+        setNewTitle("");
+        e.target.value = ""; // Reset input
+        toast({ title: "Sukses ✅", description: "Dokumen berhasil diupload" });
+      } else {
+        const errorData = await response.json().catch(() => ({ message: "Gagal upload dokumen" }));
+        console.error("Upload failed:", errorData);
+        toast({ title: "Error", description: errorData.message || "Gagal upload dokumen. Pastikan backend berjalan.", variant: "destructive" });
+        e.target.value = ""; // Reset input
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({ title: "Error", description: "Gagal menghubungi server. Pastikan backend berjalan di port 8000.", variant: "destructive" });
+      e.target.value = ""; // Reset input
+    } finally {
       setIsUploading(false);
-      toast({ title: "Sukses", description: "Dokumen berhasil diupload" });
-    }, 1500);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: number) => {
     if (deletingId === id) {
-      setDocuments(documents.filter((d) => d.id !== id));
-      setDeletingId(null);
-      toast({ title: "Sukses", description: "Dokumen berhasil dihapus" });
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${API_URL}/documents/${id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          setDocuments(documents.filter((d) => d.id !== id));
+          setDeletingId(null);
+          toast({ title: "Sukses", description: "Dokumen berhasil dihapus" });
+        } else {
+          toast({ title: "Error", description: "Gagal menghapus dokumen", variant: "destructive" });
+        }
+      } catch (error) {
+        console.error("Delete error:", error);
+        toast({ title: "Error", description: "Gagal menghapus dokumen", variant: "destructive" });
+      }
     } else {
       setDeletingId(id);
+    }
+  };
+
+  const handleDownload = async (document: Document) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/documents/${document.id}/download`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = document.file_name;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        toast({ title: "Error", description: "Gagal download dokumen", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({ title: "Error", description: "Gagal download dokumen", variant: "destructive" });
     }
   };
 
@@ -177,7 +275,12 @@ const DocumentsManager = () => {
       {/* Documents List */}
       <Card className="p-6 bg-white/60 backdrop-blur-sm border-border/50">
         <h2 className="text-2xl font-bold mb-6">Dokumen Saya</h2>
-        {documents.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-12">
+            <Loader2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-spin" />
+            <p className="text-muted-foreground">Memuat dokumen...</p>
+          </div>
+        ) : documents.length === 0 ? (
           <div className="text-center py-12">
             <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
             <p className="text-muted-foreground mb-2">Belum ada dokumen yang diupload</p>
@@ -188,24 +291,24 @@ const DocumentsManager = () => {
             {documents.map((doc) => (
               <div key={doc.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-muted/50 transition-all duration-200">
                 <div className="flex items-center gap-4 flex-1">
-                  <div className="p-2 bg-primary/10 rounded-lg">{getDocIcon(doc.fileType)}</div>
+                  <div className="p-2 bg-primary/10 rounded-lg">{getDocIcon(doc.file_type)}</div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-medium truncate">{doc.title}</h4>
                     <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mt-1">
-                      <span>{doc.fileName}</span>
+                      <span>{doc.file_name}</span>
                       <span>•</span>
-                      <span>{formatFileSize(doc.fileSize)}</span>
+                      <span>{formatFileSize(doc.file_size)}</span>
                       <span>•</span>
-                      <span>{new Date(doc.uploadedAt).toLocaleDateString("id-ID")}</span>
+                      <span>{new Date(doc.created_at).toLocaleDateString("id-ID")}</span>
                     </div>
                   </div>
                   <Badge variant="outline" className="capitalize flex-shrink-0">
-                    {doc.fileType.replace("_", " ")}
+                    {doc.file_type.replace("_", " ")}
                   </Badge>
                 </div>
 
                 <div className="flex items-center gap-2 ml-4">
-                  <Button size="sm" variant="ghost" className="gap-2" title="Download">
+                  <Button size="sm" variant="ghost" className="gap-2" title="Download" onClick={() => handleDownload(doc)}>
                     <Download className="h-4 w-4" />
                   </Button>
                   <Button size="sm" variant={deletingId === doc.id ? "destructive" : "ghost"} onClick={() => handleDelete(doc.id)} className="gap-2" title={deletingId === doc.id ? "Klik lagi untuk confirm" : "Delete"}>

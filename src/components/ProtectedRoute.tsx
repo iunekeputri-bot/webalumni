@@ -1,12 +1,15 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { UserRole } from "@/types";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  redirectTo?: string;
+  requiredRole?: UserRole;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, redirectTo = "/auth", requiredRole }) => {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -20,7 +23,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to={redirectTo} replace />;
+  }
+
+  // Check role if requiredRole is specified
+  if (requiredRole && user.role !== requiredRole) {
+    // Redirect to appropriate dashboard based on actual role
+    const dashboardMap: Record<UserRole, string> = {
+      alumni: "/alumni/dashboard",
+      company: "/company/dashboard",
+      admin: "/admin/dashboard",
+    };
+    return <Navigate to={dashboardMap[user.role]} replace />;
   }
 
   return <>{children}</>;

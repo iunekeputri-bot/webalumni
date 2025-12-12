@@ -5,9 +5,9 @@
 
 export const DEMO_CREDENTIALS = {
   alumni: {
-    email: "demo.alumni@gmail.com",
+    email: "john@example.com",
     password: "demo1234",
-    name: "Ahmad Hidayatullah",
+    name: "John Doe",
     role: "alumni",
   },
   company: {
@@ -26,10 +26,10 @@ export const DEMO_CREDENTIALS = {
 
 export const DEMO_ACCOUNTS = [
   {
-    title: "🎓 Alumni",
+    title: "👨‍🎓 Alumni",
     email: DEMO_CREDENTIALS.alumni.email,
     password: DEMO_CREDENTIALS.alumni.password,
-    description: "Akses profil alumni, lihat lowongan, dan kelola dokumen",
+    description: "Jelajahi lowongan, kelola profil, dan terima pesan dari perusahaan",
     color: "from-blue-500/20 to-cyan-500/20",
     textColor: "text-blue-600",
   },

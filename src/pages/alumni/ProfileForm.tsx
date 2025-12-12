@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/use-toast";
 import { Upload, X, Loader2, Check, User, Mail, Phone, GraduationCap, FileText, Zap, Heart } from "lucide-react";
+import { API_URL } from "@/config/api";
 
 interface ProfileData {
   fullName: string;
@@ -24,6 +26,7 @@ interface ProfileData {
 }
 
 const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<ProfileData>(
@@ -42,6 +45,55 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
   const [newSkill, setNewSkill] = useState("");
   const [bioChars, setBioChars] = useState(formData.bio.length);
 
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        // Check localStorage first for profile data
+        if (user?.id) {
+          const storageKey = `profile_${user.id}`;
+          const stored = localStorage.getItem(storageKey);
+          if (stored) {
+            try {
+              const storedData = JSON.parse(stored);
+              setFormData(storedData);
+              setBioChars(storedData.bio?.length || 0);
+              return;
+            } catch (error) {
+              console.error("Failed to parse stored profile:", error);
+            }
+          }
+        }
+
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${API_URL}/alumni/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setFormData({
+            fullName: data.name,
+            email: data.email,
+            phone: data.phone || "",
+            graduationYear: data.graduation_year,
+            major: data.major,
+            bio: data.bio || "",
+            skills: data.skills || [],
+            workStatus: data.work_status || "siap_bekerja",
+            avatar: data.avatar || "https://avatar.vercel.sh/alumni",
+          });
+          setBioChars((data.bio || "").length);
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile", error);
+      }
+    };
+
+    fetchProfile();
+  }, [user?.id]);
+
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 50 }, (_, i) => currentYear - i);
 
@@ -52,23 +104,57 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
     { id: "belum_siap", label: "Belum Siap", color: "from-orange-500/20 to-red-500/20" },
   ];
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast({ title: "Error", description: "File size maksimal 2MB", variant: "destructive" });
-        return;
+    if (!file) return;
+
+    // Validate file size
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Error", description: "File size maksimal 2MB", variant: "destructive" });
+      return;
+    }
+
+    // Validate file type
+    if (!["image/jpeg", "image/png", "image/jpg", "image/gif"].includes(file.type)) {
+      toast({ title: "Error", description: "Format harus JPG, PNG, atau GIF", variant: "destructive" });
+      return;
+    }
+
+    try {
+      // Upload to server
+      const uploadData = new FormData();
+      uploadData.append("avatar", file);
+
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/alumni/avatar`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: uploadData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Upload failed");
       }
-      if (!["image/jpeg", "image/png"].includes(file.type)) {
-        toast({ title: "Error", description: "Format harus JPG atau PNG", variant: "destructive" });
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setFormData({ ...formData, avatar: e.target?.result as string });
-        toast({ title: "Sukses", description: "Avatar berhasil diubah" });
-      };
-      reader.readAsDataURL(file);
+
+      const data = await response.json();
+
+      // Update avatar in state with server URL
+      setFormData((prev) => ({ ...prev, avatar: data.avatar }));
+
+      toast({
+        title: "Sukses",
+        description: "Foto profil berhasil diupload dan dapat dilihat semua orang",
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Gagal upload foto profil",
+        variant: "destructive",
+      });
     }
   };
 
@@ -99,8 +185,34 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
 
     setIsSaving(true);
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Save to localStorage with user ID
+      if (user?.id) {
+        const storageKey = `profile_${user.id}`;
+        localStorage.setItem(storageKey, JSON.stringify(formData));
+      }
+
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/alumni/me`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.fullName,
+          phone: formData.phone,
+          graduation_year: formData.graduationYear,
+          major: formData.major,
+          bio: formData.bio,
+          skills: formData.skills,
+          work_status: formData.workStatus,
+          avatar: formData.avatar,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update");
+
       toast({ title: "Sukses", description: "Profil berhasil disimpan" });
     } catch {
       toast({ title: "Error", description: "Gagal menyimpan profil", variant: "destructive" });
@@ -176,7 +288,7 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
                   id="fullname"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  placeholder="Ahmad Hidayatullah"
+                  placeholder="Masukkan nama lengkap Anda"
                   className="border-2 border-border/50 focus:border-primary/50 h-11 text-base bg-white/50 backdrop-blur-sm transition-all duration-300"
                 />
               </motion.div>
@@ -306,7 +418,7 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
                     {formData.skills.map((skill, idx) => (
                       <motion.div key={skill} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ delay: idx * 0.05 }}>
                         <Badge
-                          className="gap-2 px-4 py-2 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30 border border-primary/50 cursor-pointer transition-all duration-300 hover:shadow-lg text-base font-semibold"
+                          className="gap-2 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90 border border-primary/50 cursor-pointer transition-all duration-300 hover:shadow-lg text-base font-semibold"
                           onClick={() => removeSkill(skill)}
                         >
                           {skill}
@@ -345,7 +457,7 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
                   key={option.id}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setFormData({ ...formData, workStatus: option.id as any })}
+                  onClick={() => setFormData({ ...formData, workStatus: option.id as "siap_bekerja" | "mencari_peluang" | "melanjutkan_pendidikan" | "belum_siap" })}
                   className={`p-6 rounded-xl border-2 font-semibold transition-all duration-300 ${
                     formData.workStatus === option.id ? `border-primary bg-gradient-to-br ${option.color} shadow-lg scale-105` : `border-border/50 hover:border-primary/50 hover:bg-muted/50`
                   }`}

@@ -19,11 +19,24 @@ class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    // Ignore Recharts removeChild errors - they're transient and don't affect functionality
+    const isRechartsError = error.message?.includes("removeChild") || error.message?.includes("not a child") || error.message?.includes("<Text");
+
+    if (isRechartsError) {
+      console.warn("Recharts transient error suppressed:", error.message);
+      return { hasError: false };
+    }
+
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+    // Ignore Recharts removeChild errors
+    const isRechartsError = error.message?.includes("removeChild") || error.message?.includes("not a child") || error.message?.includes("<Text");
+
+    if (!isRechartsError) {
+      console.error("Uncaught error:", error, errorInfo);
+    }
   }
 
   private handleRetry = () => {

@@ -29,10 +29,26 @@ const Auth: React.FC = () => {
     }
   }, [searchParams]);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (alumni only)
   useEffect(() => {
     if (user) {
-      navigate("/alumni/dashboard");
+      // Small delay to ensure state is settled before navigation
+      const timer = setTimeout(() => {
+        try {
+          // Redirect based on actual role
+          const dashboardMap: Record<string, string> = {
+            alumni: "/alumni/dashboard",
+            company: "/company/dashboard",
+            admin: "/admin/dashboard",
+          };
+          const targetDashboard = dashboardMap[user.role] || "/alumni/dashboard";
+          navigate(targetDashboard, { replace: true });
+        } catch (error) {
+          console.error("Navigation error:", error);
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [user, navigate]);
 
@@ -47,22 +63,19 @@ const Auth: React.FC = () => {
           description: "Email dan password harus diisi",
           variant: "destructive",
         });
+        setIsLoading(false);
         return;
       }
 
-      await login(loginForm.email, loginForm.password, userType);
-      toast({
-        title: "Sukses",
-        description: "Anda berhasil login",
-      });
-      navigate("/alumni/dashboard");
+      await login(loginForm.email, loginForm.password);
+      // Don't set isLoading(false) here - keep loading until navigation completes
+      // Navigation will happen via useEffect and component will unmount
     } catch {
       toast({
         title: "Error",
         description: "Email atau password salah",
         variant: "destructive",
       });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -81,7 +94,7 @@ const Auth: React.FC = () => {
         return;
       }
 
-      await login(loginForm.email, loginForm.password, userType);
+      await login(loginForm.email, loginForm.password);
       toast({
         title: "Sukses",
         description: "Anda berhasil login",
@@ -107,12 +120,12 @@ const Auth: React.FC = () => {
       </div>
 
       {/* Back to Home */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="absolute top-4 left-4 z-10">
+      <div className="absolute top-4 left-4 z-10">
         <Button variant="ghost" onClick={() => navigate("/")} className="gap-2">
           <ArrowLeft className="h-4 w-4" />
           Kembali ke Beranda
         </Button>
-      </motion.div>
+      </div>
 
       <div className="container mx-auto px-4 min-h-screen flex items-center justify-center py-12 relative z-10">
         <div className="grid md:grid-cols-2 gap-12 max-w-5xl w-full items-center">
