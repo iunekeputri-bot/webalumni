@@ -15,6 +15,13 @@ import { useAuth } from "@/context/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { API_URL } from "@/config/api";
 
+// Helper to read XSRF token cookie (for Sanctum cookie auth)
+const getXsrf = () => {
+  if (typeof document === "undefined") return "";
+  const raw = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1];
+  return raw ? decodeURIComponent(raw) : "";
+};
+
 interface Alumni {
   id: string;
   name: string;
@@ -94,6 +101,7 @@ export default function AdminDashboard() {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
+        credentials: "include",
       });
 
       console.log("📡 Response status:", response.status);
@@ -132,6 +140,7 @@ export default function AdminDashboard() {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
+        credentials: "include",
       });
       if (!response.ok) throw new Error("Failed to fetch job postings");
       const data = await response.json();
@@ -176,13 +185,17 @@ export default function AdminDashboard() {
       const url = editingId ? `${API_URL}/alumni/${editingId}` : `${API_URL}/alumni`;
       const method = editingId ? "PUT" : "POST";
 
+      const xsrf = getXsrf();
+
       const response = await fetch(url, {
         method,
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           Accept: "application/json",
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
@@ -240,12 +253,15 @@ export default function AdminDashboard() {
   const handleDeleteAlumni = async (id: string) => {
     try {
       const token = localStorage.getItem("token");
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/alumni/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Failed to delete alumni");
@@ -285,10 +301,15 @@ export default function AdminDashboard() {
   const handleExport = async () => {
     try {
       const token = localStorage.getItem("token");
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/alumni/export`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(xsrf ? { "X-XSRF-TOKEN": xsrf } : {}),
         },
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Export failed");
@@ -315,10 +336,15 @@ export default function AdminDashboard() {
   const handleDownloadTemplate = async () => {
     try {
       const token = localStorage.getItem("token");
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/alumni/template`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(xsrf ? { "X-XSRF-TOKEN": xsrf } : {}),
         },
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Download template failed");
@@ -409,12 +435,16 @@ export default function AdminDashboard() {
         throw new Error("Token tidak ditemukan. Silakan login ulang.");
       }
 
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/alumni/import`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
+          "X-XSRF-TOKEN": xsrf,
+          "X-Requested-With": "XMLHttpRequest",
         },
+        credentials: "include",
         body: formData,
       });
 

@@ -41,6 +41,12 @@ import { useAuth } from "@/context/AuthContext";
 import { ChatLayout } from "@/components/chat/ChatLayout";
 import { useChat } from "@/hooks/useChat";
 import { API_URL } from "@/config/api";
+// Helper to read XSRF token cookie (for Sanctum cookie auth)
+const getXsrf = () => {
+  if (typeof document === "undefined") return "";
+  const raw = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1];
+  return raw ? decodeURIComponent(raw) : "";
+};
 // import { usePresence } from "@/hooks/usePresence"; // DISABLED - causing blank screen
 
 interface Alumni {
@@ -138,11 +144,21 @@ const CompanyDashboard = () => {
   const [companyName, setCompanyName] = useState(user?.name || "");
 
   const token = localStorage.getItem("token");
-  const getHeaders = () => ({
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-    Accept: "application/json",
-  });
+  const getHeaders = () => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    };
+    try {
+      const raw = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+      const xsrf = raw ? decodeURIComponent(raw) : "";
+      if (xsrf) headers["X-XSRF-TOKEN"] = xsrf;
+    } catch (e) {
+      // ignore
+    }
+    return headers;
+  };
 
   // Ensure dashboard always loads via hard refresh to avoid chart DOM errors after login navigation
   useEffect(() => {
@@ -181,6 +197,7 @@ const CompanyDashboard = () => {
         // Fetch company info
         const companyRes = await fetch(`${API_URL}/company/me`, {
           headers: getHeaders(),
+          credentials: "include",
         });
         if (companyRes.ok) {
           const companyData = await companyRes.json();
@@ -190,6 +207,7 @@ const CompanyDashboard = () => {
         // Fetch alumni data from all admin databases
         const alumniRes = await fetch(`${API_URL}/company/alumni`, {
           headers: getHeaders(),
+          credentials: "include",
         });
         if (!alumniRes.ok) throw new Error("Failed to fetch alumni");
         const alumniResponse = await alumniRes.json();
@@ -236,6 +254,7 @@ const CompanyDashboard = () => {
         // Fetch company's job postings
         const jobsRes = await fetch(`${API_URL}/company/jobs`, {
           headers: getHeaders(),
+          credentials: "include",
         });
         if (jobsRes.ok) {
           jobsData = await jobsRes.json();
@@ -337,6 +356,7 @@ const CompanyDashboard = () => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -398,6 +418,7 @@ const CompanyDashboard = () => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -504,6 +525,7 @@ const CompanyDashboard = () => {
       const response = await fetch(url, {
         method: method,
         headers: getHeaders(),
+        credentials: "include",
         body: JSON.stringify({
           title: newJob.title,
           description: `Lowongan untuk posisi ${newJob.title} di ${newJob.location}`,
@@ -569,6 +591,7 @@ const CompanyDashboard = () => {
       setSelectedJobForApplications(job);
       const response = await fetch(`${API_URL}/job-postings/${job.id}/applications`, {
         headers: getHeaders(),
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -595,6 +618,7 @@ const CompanyDashboard = () => {
       const response = await fetch(`${API_URL}/job-postings/${jobId}`, {
         method: "DELETE",
         headers: getHeaders(),
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Failed to delete job");
@@ -619,6 +643,7 @@ const CompanyDashboard = () => {
       const response = await fetch(`${API_URL}/applications/${applicationId}/status`, {
         method: "PUT",
         headers: getHeaders(),
+        credentials: "include",
         body: JSON.stringify({
           status: newStatus,
         }),

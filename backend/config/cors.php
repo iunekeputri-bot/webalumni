@@ -26,12 +26,21 @@ return [
     /*
     * Matches the request method. `['*']` allows all methods.
     */
-    'allowed_methods' => ['*'],
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 
     /*
      * Matches the request origin. `['*']` allows all origins. Wildcards can be used, eg `*.mydomain.com`
      */
-    'allowed_origins' => ['*'],
+    'allowed_origins' => [
+        'http://localhost',
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:8000',
+        'http://192.168.103.241',
+    ],
 
     /*
      * Patterns that can be used with `preg_match` to match the origin.
@@ -41,7 +50,7 @@ return [
     /*
      * Sets the Access-Control-Allow-Headers response header. `['*']` allows all headers.
      */
-    'allowed_headers' => ['*'],
+    'allowed_headers' => ['Content-Type', 'Authorization', 'X-XSRF-TOKEN', 'X-Requested-With'],
 
     /*
      * Sets the Access-Control-Expose-Headers response header with these headers.

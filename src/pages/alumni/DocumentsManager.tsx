@@ -9,6 +9,13 @@ import { toast } from "@/components/ui/use-toast";
 import { Upload, Download, Trash2, File, FileText, Image, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
+// Helper to read XSRF token cookie
+const getXsrf = () => {
+  if (typeof document === "undefined") return "";
+  const raw = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1];
+  return raw ? decodeURIComponent(raw) : "";
+};
+
 interface Document {
   id: number;
   title: string;
@@ -44,6 +51,7 @@ const DocumentsManager = () => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -123,12 +131,15 @@ const DocumentsManager = () => {
       });
 
       const token = localStorage.getItem("token");
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/documents`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
         body: formData,
       });
 
@@ -160,11 +171,14 @@ const DocumentsManager = () => {
     if (deletingId === id) {
       try {
         const token = localStorage.getItem("token");
+        const xsrf = getXsrf();
         const response = await fetch(`${API_URL}/documents/${id}`, {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${token}`,
+            "X-XSRF-TOKEN": xsrf,
           },
+          credentials: "include",
         });
 
         if (response.ok) {
@@ -190,6 +204,7 @@ const DocumentsManager = () => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
       });
 
       if (response.ok) {

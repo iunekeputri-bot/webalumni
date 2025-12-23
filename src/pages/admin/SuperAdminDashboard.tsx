@@ -122,6 +122,20 @@ const SuperAdminDashboard = () => {
   const [maintenanceEndTime, setMaintenanceEndTime] = useState("");
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
 
+  // Helper to build a URL object that works with relative `API_URL` values
+  const makeApiUrl = (path: string) => {
+    try {
+      const base = typeof API_URL === "string" && (API_URL.startsWith("http://") || API_URL.startsWith("https://"))
+        ? API_URL
+        : `${window.location.origin}${API_URL.startsWith("/") ? API_URL : "/" + API_URL}`;
+      const baseWithSlash = base.endsWith("/") ? base : base + "/";
+      return new URL(path.replace(/^\//, ""), baseWithSlash);
+    } catch (e) {
+      // fallback to constructing a relative URL string inside origin
+      return new URL(path, window.location.origin);
+    }
+  };
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -175,12 +189,13 @@ const SuperAdminDashboard = () => {
   useEffect(() => {
     const fetchMaintenanceStatus = async () => {
       try {
-        const url = new URL(`${API_URL}/super-admin/maintenance-status`);
+        const url = makeApiUrl(`/super-admin/maintenance-status`);
         if (accessKey === SUPER_ADMIN_SECRET) {
           url.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
         }
         const response = await fetch(url.toString(), {
           headers: getAuthHeaders(),
+          credentials: "include",
         });
         if (response.ok) {
           const data = await response.json();
@@ -211,13 +226,14 @@ const SuperAdminDashboard = () => {
   const toggleMaintenanceMode = async () => {
     setIsTogglingMaintenance(true);
     try {
-      const url = new URL(`${API_URL}/super-admin/toggle-maintenance`);
+      const url = makeApiUrl(`/super-admin/toggle-maintenance`);
       if (accessKey === SUPER_ADMIN_SECRET) {
         url.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
       }
       const response = await fetch(url.toString(), {
         method: "POST",
         headers: getAuthHeaders(),
+        credentials: "include",
         body: JSON.stringify({
           enabled: !isMaintenanceMode,
           end_date: maintenanceEndDate,
@@ -270,6 +286,17 @@ const SuperAdminDashboard = () => {
       headers["X-Super-Admin-Key"] = SUPER_ADMIN_SECRET;
     }
 
+    // Attach XSRF token from cookie when present (for Sanctum cookie auth)
+    try {
+      if (typeof document !== "undefined") {
+        const raw = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1];
+        const xsrf = raw ? decodeURIComponent(raw) : "";
+        if (xsrf) headers["X-XSRF-TOKEN"] = xsrf;
+      }
+    } catch (e) {
+      // ignore
+    }
+
     return headers;
   };
 
@@ -278,12 +305,13 @@ const SuperAdminDashboard = () => {
     setIsLoadingAlumni(true);
     try {
       console.log("Fetching alumni...");
-      const url = new URL(`${API_URL}/super-admin/alumni`);
+      const url = makeApiUrl(`/super-admin/alumni`);
       if (accessKey === SUPER_ADMIN_SECRET) {
         url.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
       }
       const response = await fetch(url.toString(), {
         headers: getAuthHeaders(),
+        credentials: "include",
       });
       console.log("Alumni response status:", response.status);
       if (response.ok) {
@@ -319,12 +347,13 @@ const SuperAdminDashboard = () => {
     setIsLoadingMessages(true);
     try {
       console.log("Fetching messages...");
-      const url = new URL(`${API_URL}/super-admin/messages`);
+      const url = makeApiUrl(`/super-admin/messages`);
       if (accessKey === SUPER_ADMIN_SECRET) {
         url.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
       }
       const response = await fetch(url.toString(), {
         headers: getAuthHeaders(),
+        credentials: "include",
       });
       console.log("Messages response status:", response.status);
       if (response.ok) {
@@ -360,12 +389,13 @@ const SuperAdminDashboard = () => {
     setIsLoadingJobs(true);
     try {
       console.log("Fetching job postings...");
-      const url = new URL(`${API_URL}/super-admin/job-postings`);
+      const url = makeApiUrl(`/super-admin/job-postings`);
       if (accessKey === SUPER_ADMIN_SECRET) {
         url.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
       }
       const response = await fetch(url.toString(), {
         headers: getAuthHeaders(),
+        credentials: "include",
       });
       console.log("Job postings response status:", response.status);
       if (response.ok) {
@@ -401,12 +431,13 @@ const SuperAdminDashboard = () => {
     setIsLoadingApps(true);
     try {
       console.log("Fetching applications...");
-      const url = new URL(`${API_URL}/super-admin/applications`);
+      const url = makeApiUrl(`/super-admin/applications`);
       if (accessKey === SUPER_ADMIN_SECRET) {
         url.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
       }
       const response = await fetch(url.toString(), {
         headers: getAuthHeaders(),
+        credentials: "include",
       });
       console.log("Applications response status:", response.status);
       if (response.ok) {
@@ -447,8 +478,8 @@ const SuperAdminDashboard = () => {
       console.log("🚀 Loading initial data...");
 
       // Build URLs with secret key if needed
-      const usersUrl = new URL(`${API_URL}/super-admin/users`);
-      const statsUrl = new URL(`${API_URL}/super-admin/stats`);
+      const usersUrl = makeApiUrl(`/super-admin/users`);
+      const statsUrl = makeApiUrl(`/super-admin/stats`);
 
       if (accessKey === SUPER_ADMIN_SECRET) {
         usersUrl.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
@@ -456,7 +487,10 @@ const SuperAdminDashboard = () => {
       }
 
       // Fetch users and stats
-      const [usersRes, statsRes] = await Promise.all([fetch(usersUrl.toString(), { headers }), fetch(statsUrl.toString(), { headers })]);
+      const [usersRes, statsRes] = await Promise.all([
+        fetch(usersUrl.toString(), { headers, credentials: "include" }),
+        fetch(statsUrl.toString(), { headers, credentials: "include" }),
+      ]);
 
       if (usersRes.ok) {
         const data = await usersRes.json();
@@ -533,13 +567,18 @@ const SuperAdminDashboard = () => {
       const { confirmPassword, ...submitData } = formData;
 
       const token = localStorage.getItem("token");
+      const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+      const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : "";
+
       const response = await fetch(`${API_URL}/super-admin/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
           Authorization: `Bearer ${token}`,
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
         body: JSON.stringify(submitData),
       });
 
@@ -627,6 +666,9 @@ const SuperAdminDashboard = () => {
     let failCount = 0;
 
     try {
+      const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+      const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : "";
+
       for (const userId of selectedUserIds) {
         try {
           const response = await fetch(`${API_URL}/super-admin/users/${userId}`, {
@@ -634,7 +676,9 @@ const SuperAdminDashboard = () => {
             headers: {
               Authorization: `Bearer ${token}`,
               Accept: "application/json",
+              "X-XSRF-TOKEN": xsrf,
             },
+            credentials: "include",
           });
 
           if (response.ok) {
@@ -697,13 +741,18 @@ const SuperAdminDashboard = () => {
 
     try {
       const token = localStorage.getItem("token");
+      const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+      const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : "";
+
       const response = await fetch(`${API_URL}/super-admin/users/${userId}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
           Authorization: `Bearer ${token}`,
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Gagal hapus user");
@@ -728,13 +777,18 @@ const SuperAdminDashboard = () => {
 
     try {
       const token = localStorage.getItem("token");
+      const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+      const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : "";
+
       const response = await fetch(`${API_URL}/super-admin/clear-all`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
           Authorization: `Bearer ${token}`,
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Gagal clear data");
@@ -763,12 +817,17 @@ const SuperAdminDashboard = () => {
         description: "Membuat backup database...",
       });
 
+      const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+      const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : "";
+
       const response = await fetch(`${API_URL}/super-admin/backup`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -827,11 +886,16 @@ const SuperAdminDashboard = () => {
           description: "Merestore database...",
         });
 
+        const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+        const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : "";
+
         const response = await fetch(`${API_URL}/super-admin/restore`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
+            "X-XSRF-TOKEN": xsrf,
           },
+          credentials: "include",
           body: formData,
         });
 

@@ -17,7 +17,7 @@ const echo = new Echo({
   forceTLS: false,
   disableStats: true,
   enabledTransports: ["ws", "wss"],
-  authEndpoint: `http://${window.location.hostname}:8000/api/broadcasting/auth`,
+  authEndpoint: `/api/broadcasting/auth`,
   auth: {
     headers: {
       Authorization: `Bearer ${getToken()}`,

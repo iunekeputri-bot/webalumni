@@ -3,6 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { motion } from "framer-motion";
 import { API_URL } from "@/config/api";
+// Helper to read XSRF token cookie
+const getXsrf = () => {
+  if (typeof document === "undefined") return "";
+  const raw = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1];
+  return raw ? decodeURIComponent(raw) : "";
+};
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +71,7 @@ const JobApplicationForm = () => {
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
           },
+          credentials: "include",
         });
 
         console.log("Job response status:", jobResponse.status);
@@ -83,6 +90,7 @@ const JobApplicationForm = () => {
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
           },
+          credentials: "include",
         });
 
         if (docsResponse.ok) {
@@ -143,13 +151,16 @@ const JobApplicationForm = () => {
       console.log("Token:", token);
       console.log("Job ID:", jobId, "Type:", typeof jobId);
 
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/applications/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
         body: JSON.stringify({
           job_posting_id: parseInt(jobId || "0"),
           cover_letter: coverLetter,

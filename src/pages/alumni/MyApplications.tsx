@@ -95,11 +95,15 @@ const MyApplications = () => {
     if (deletingId === applicationId) {
       try {
         const token = localStorage.getItem("token");
+        const xsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+        const xsrfToken = xsrf ? decodeURIComponent(xsrf) : "";
         const response = await fetch(`${API_URL}/applications/${applicationId}`, {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${token}`,
+            "X-XSRF-TOKEN": xsrfToken,
           },
+          credentials: "include",
         });
 
         if (response.ok) {

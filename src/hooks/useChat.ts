@@ -176,9 +176,19 @@ export function useChat(currentUserId: number | null) {
           headers["X-Socket-ID"] = echo.socketId();
         }
 
+        // Ensure CSRF header and cookies are sent for Sanctum cookie auth
+        try {
+          const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+          const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : undefined;
+          if (xsrf) headers["X-XSRF-TOKEN"] = xsrf;
+        } catch (e) {
+          // ignore cookie parse errors
+        }
+
         const response = await fetch(`${API_URL}/messages`, {
           method: "POST",
           headers: headers,
+          credentials: "include",
           body: JSON.stringify({
             receiver_id: receiverId,
             message: content,
@@ -225,9 +235,18 @@ export function useChat(currentUserId: number | null) {
       if (!currentUserId) return false;
 
       try {
+        // Include credentials and XSRF header for Sanctum cookie auth
+        const headers = getAuthHeaders();
+        try {
+          const rawXsrf = typeof document !== "undefined" ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1] : undefined;
+          const xsrf = rawXsrf ? decodeURIComponent(rawXsrf) : undefined;
+          if (xsrf) headers["X-XSRF-TOKEN"] = xsrf;
+        } catch (e) {}
+
         const response = await fetch(`${API_URL}/messages/${currentUserId}/${otherUserId}`, {
           method: "DELETE",
-          headers: getAuthHeaders(),
+          headers,
+          credentials: "include",
         });
 
         if (!response.ok) throw new Error("Failed to delete conversation");
@@ -297,16 +316,16 @@ export function useChat(currentUserId: number | null) {
         });
       });
 
-      // Always add polling as backup for conversations (every 3 seconds)
+      // Always add polling as backup for conversations (every 15 seconds)
       pollingIntervalRef.current = setInterval(() => {
         fetchConversations(false);
-      }, 3000);
+      }, 15000);
     } catch (error) {
       console.error("WebSocket connection error:", error);
       // Fallback to polling if WebSocket fails
       pollingIntervalRef.current = setInterval(() => {
         fetchConversations(false);
-      }, 3000);
+      }, 15000);
     }
 
     return () => {
@@ -393,7 +412,7 @@ export function useChat(currentUserId: number | null) {
         if (currentActiveConvo) {
           fetchMessages(currentActiveConvo.user_id, false);
         }
-      }, 2000); // Poll every 2 seconds as backup
+      }, 20000); // Poll every 20 seconds as backup
     } catch (error) {
       console.error("WebSocket message connection error:", error);
       // Fallback to polling if WebSocket fails
@@ -402,7 +421,7 @@ export function useChat(currentUserId: number | null) {
         if (currentActiveConvo) {
           fetchMessages(currentActiveConvo.user_id, false);
         }
-      }, 2000);
+      }, 20000);
     }
 
     return () => {

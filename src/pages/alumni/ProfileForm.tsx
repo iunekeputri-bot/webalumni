@@ -13,6 +13,13 @@ import { toast } from "@/components/ui/use-toast";
 import { Upload, X, Loader2, Check, User, Mail, Phone, GraduationCap, FileText, Zap, Heart } from "lucide-react";
 import { API_URL } from "@/config/api";
 
+// Helper to read XSRF token cookie (for Sanctum cookie auth)
+const getXsrf = () => {
+  if (typeof document === "undefined") return "";
+  const raw = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1];
+  return raw ? decodeURIComponent(raw) : "";
+};
+
 interface ProfileData {
   fullName: string;
   email: string;
@@ -70,6 +77,7 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
           },
+          credentials: "include",
         });
         if (response.ok) {
           const data = await response.json();
@@ -126,11 +134,14 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
       uploadData.append("avatar", file);
 
       const token = localStorage.getItem("token");
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/alumni/avatar`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
         body: uploadData,
       });
 
@@ -192,13 +203,16 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
       }
 
       const token = localStorage.getItem("token");
+      const xsrf = getXsrf();
       const response = await fetch(`${API_URL}/alumni/me`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
         body: JSON.stringify({
           name: formData.fullName,
           phone: formData.phone,

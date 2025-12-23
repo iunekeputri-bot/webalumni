@@ -312,31 +312,28 @@ class AlumniController extends Controller
         $alumni = Alumni::where('user_id', $user->id)->firstOrFail();
 
         // Delete old avatar if exists
-        if ($alumni->avatar && file_exists(public_path($alumni->avatar))) {
-            unlink(public_path($alumni->avatar));
+        if ($alumni->avatar) {
+            // Remove leading slash if exists
+            $oldPath = ltrim($alumni->avatar, '/');
+            if (\Storage::disk('public')->exists($oldPath)) {
+                \Storage::disk('public')->delete($oldPath);
+            }
         }
 
-        // Store new avatar
+        // Store new avatar using Storage facade (works with symlinked public/storage)
         $file = $request->file('avatar');
         $filename = 'avatar_' . $alumni->id . '_' . time() . '.' . $file->getClientOriginalExtension();
-        $path = 'storage/avatars/' . $filename;
+        $filePath = $file->storeAs('avatars', $filename, 'public');
 
-        // Ensure directory exists
-        if (!file_exists(public_path('storage/avatars'))) {
-            mkdir(public_path('storage/avatars'), 0755, true);
-        }
-
-        $file->move(public_path('storage/avatars'), $filename);
-
-        // Update avatar path in database
+        // Update avatar path in database (store as relative path for flexibility)
         $alumni->update([
-            'avatar' => '/' . $path
+            'avatar' => '/storage/' . $filePath
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Avatar berhasil diupload',
-            'avatar' => asset($path)
+            'avatar' => asset('/storage/' . $filePath)
         ]);
     }
 

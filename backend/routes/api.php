@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Broadcast;
 Broadcast::routes(['middleware' => ['auth:sanctum']]);
 
 // Auth routes (no middleware required for login)
-Route::post('/login', 'AuthController@login');
+Route::post('/login', 'AuthController@login')->name('login');
 
 // Register route (only for admin)
 Route::middleware('auth:sanctum')->post('/register', 'AuthController@register');

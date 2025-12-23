@@ -63,6 +63,7 @@ const ApplicationDetails = () => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        credentials: "include",
       });
 
       if (response.ok) {

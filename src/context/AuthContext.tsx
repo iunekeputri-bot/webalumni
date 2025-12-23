@@ -37,12 +37,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
+      // Ensure CSRF cookie for Sanctum (prevents 419 CSRF token mismatch)
+      try {
+        // Sanctum CSRF cookie endpoint must be requested at the root path
+        // (not behind the `/api` proxy). Requesting `/sanctum/csrf-cookie`
+        // ensures the cookie is set for same-origin requests.
+        await fetch(`/sanctum/csrf-cookie`, { credentials: "include" });
+      } catch (e) {
+        console.debug("Warning: failed to fetch CSRF cookie", e);
+      }
+
+      // Read XSRF-TOKEN cookie and set header for fetch (fetch doesn't set it automatically)
+      const xsrfRaw = typeof document !== "undefined"
+        ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1]
+        : undefined;
+      const xsrf = xsrfRaw ? decodeURIComponent(xsrfRaw) : "";
+
       // API login (works with both demo and real users)
       const response = await fetch(`${API_URL}/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
+          "X-XSRF-TOKEN": xsrf,
         },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
 
@@ -79,12 +98,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (email: string, password: string, name: string, role: UserRole) => {
+    // Ensure CSRF cookie for Sanctum when registering
+    try {
+      await fetch(`/sanctum/csrf-cookie`, { credentials: "include" });
+    } catch (e) {
+      console.debug("Warning: failed to fetch CSRF cookie for register", e);
+    }
+
     // API signup
+    const xsrfRaw = typeof document !== "undefined"
+      ? document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1]
+      : undefined;
+    const xsrf = xsrfRaw ? decodeURIComponent(xsrfRaw) : "";
+
     const response = await fetch(`${API_URL}/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-XSRF-TOKEN": xsrf,
       },
+      credentials: "include",
       body: JSON.stringify({ name, email, password, role }),
     });
 

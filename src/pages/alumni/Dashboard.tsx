@@ -3,6 +3,12 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { API_URL } from "@/config/api";
+// Helper to read XSRF token cookie
+const getXsrf = () => {
+  if (typeof document === "undefined") return "";
+  const raw = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="))?.split("=")[1];
+  return raw ? decodeURIComponent(raw) : "";
+};
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -105,6 +111,7 @@ const Dashboard = () => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -171,6 +178,7 @@ const Dashboard = () => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -190,6 +198,7 @@ const Dashboard = () => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -226,6 +235,7 @@ const Dashboard = () => {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
+        credentials: "include",
       });
 
       if (response.ok) {

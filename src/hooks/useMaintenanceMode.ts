@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+import { API_URL } from "../config/api";
 
 export const useMaintenanceMode = () => {
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
@@ -29,12 +28,8 @@ export const useMaintenanceMode = () => {
       }
     };
 
+    // Check maintenance status only on component mount to reduce API load
     checkMaintenanceMode();
-
-    // Check maintenance status every 30 seconds
-    const interval = setInterval(checkMaintenanceMode, 30000);
-
-    return () => clearInterval(interval);
   }, []);
 
   return { isMaintenanceMode, isChecking };

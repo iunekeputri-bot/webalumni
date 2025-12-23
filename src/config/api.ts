@@ -8,9 +8,10 @@ const getApiUrl = () => {
   }
 
   // Otherwise, use the current hostname with port 8000
-  // This allows the app to work when accessed from other devices on the network
-  const hostname = window.location.hostname;
-  return `http://${hostname}:8000/api`;
+  // Default to a relative path so the browser will use the same origin
+  // and nginx can proxy `/api` to the backend. This avoids calls to
+  // the client's localhost:8000 which is usually incorrect in production.
+  return `/api`;
 };
 
 export const API_URL = getApiUrl();
