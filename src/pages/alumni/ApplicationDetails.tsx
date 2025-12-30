@@ -36,6 +36,9 @@ interface JobApplication {
       id: number;
       name: string;
       email: string;
+      phone?: string;
+      address?: string;
+      website?: string;
     };
   } | null;
   documents: Document[];
@@ -149,6 +152,14 @@ const ApplicationDetails = () => {
                   <span>{application.jobPosting.location}</span>
                 </div>
               )}
+              {application.jobPosting?.company?.website && (
+                <div className="flex items-center gap-1">
+                  <Building className="h-4 w-4" />
+                  <a href={application.jobPosting.company.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    Website
+                  </a>
+                </div>
+              )}
               <div className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
                 <span>Dilamar: {formatDate(application.created_at)}</span>
@@ -198,12 +209,12 @@ const ApplicationDetails = () => {
                         {application.jobPosting.job_type === "full-time"
                           ? "Full Time"
                           : application.jobPosting.job_type === "part-time"
-                          ? "Part Time"
-                          : application.jobPosting.job_type === "contract"
-                          ? "Kontrak"
-                          : application.jobPosting.job_type === "internship"
-                          ? "Magang"
-                          : application.jobPosting.job_type}
+                            ? "Part Time"
+                            : application.jobPosting.job_type === "contract"
+                              ? "Kontrak"
+                              : application.jobPosting.job_type === "internship"
+                                ? "Magang"
+                                : application.jobPosting.job_type}
                       </p>
                     </div>
                     <div>
@@ -214,6 +225,44 @@ const ApplicationDetails = () => {
                 </>
               ) : (
                 <p className="text-muted-foreground italic">Informasi lowongan tidak tersedia.</p>
+              )}
+
+              {/* Company Info Section */}
+              {application.jobPosting?.company && (
+                <div className="mt-8 pt-6 border-t border-border/50">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <Building className="h-4 w-4 text-primary" />
+                    Info Perusahaan
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Nama Perusahaan</p>
+                      <p className="font-medium">{application.jobPosting.company.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Email</p>
+                      <p className="font-medium">{application.jobPosting.company.email}</p>
+                    </div>
+                    {application.jobPosting.company.phone && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Telepon</p>
+                        <p className="font-medium">{application.jobPosting.company.phone}</p>
+                      </div>
+                    )}
+                    {application.jobPosting.company.website && (
+                      <div>
+                        <p className="text-muted-foreground text-xs">Website</p>
+                        <a href={application.jobPosting.company.website} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">{application.jobPosting.company.website}</a>
+                      </div>
+                    )}
+                    {application.jobPosting.company.address && (
+                      <div className="md:col-span-2">
+                        <p className="text-muted-foreground text-xs">Alamat</p>
+                        <p className="font-medium">{application.jobPosting.company.address}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </Card>

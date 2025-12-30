@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Alumni;
-use App\User;
+use App\Models\Alumni;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -46,6 +46,8 @@ class AlumniController extends Controller
     public function store(Request $request)
     {
         return DB::transaction(function () use ($request) {
+            ob_start(); // Start buffering to catch unexpected output
+
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
@@ -71,6 +73,11 @@ class AlumniController extends Controller
                 'user_id' => $user->id,
                 'join_date' => now(),
             ]));
+
+            $junk = ob_get_clean(); // Discard accumulated output
+            if (!empty($junk)) {
+                \Illuminate\Support\Facades\Log::warning('Unexpected output during alumni creation: ' . $junk);
+            }
 
             return response()->json($alumni, 201);
         });
@@ -101,9 +108,9 @@ class AlumniController extends Controller
 
         $validatedData = $request->validate([
             'name' => 'string|max:255',
-            'email' => 'email|unique:alumni,email,'.$id,
+            'email' => 'email|unique:alumni,email,' . $id,
             'birth_date' => 'date',
-            'nisn' => 'string|unique:alumni,nisn,'.$id,
+            'nisn' => 'string|unique:alumni,nisn,' . $id,
             'phone' => 'nullable|string',
             'major' => 'string',
             'graduation_year' => 'integer',
@@ -111,6 +118,9 @@ class AlumniController extends Controller
         ]);
 
         $alumni->update($validatedData);
+
+        // Broadcast profile update
+        broadcast(new \App\Events\AlumniProfileUpdated($alumni))->toOthers();
 
         return $alumni;
     }
@@ -133,16 +143,26 @@ class AlumniController extends Controller
         $filledFields = 0;
 
         // Check required fields
-        if (!empty($alumni->name)) $filledFields++;
-        if (!empty($alumni->email)) $filledFields++;
-        if (!empty($alumni->phone)) $filledFields++;
-        if (!empty($alumni->major)) $filledFields++;
-        if (!empty($alumni->graduation_year)) $filledFields++;
-        if (!empty($alumni->birth_date)) $filledFields++;
-        if (!empty($alumni->nisn)) $filledFields++;
-        if (!empty($alumni->bio)) $filledFields++;
-        if (!empty($alumni->avatar) && $alumni->avatar !== 'https://avatar.vercel.sh/' . strtolower(str_replace(" ", "", $alumni->name))) $filledFields++;
-        if (!empty($alumni->skills) && count($alumni->skills) > 0) $filledFields++;
+        if (!empty($alumni->name))
+            $filledFields++;
+        if (!empty($alumni->email))
+            $filledFields++;
+        if (!empty($alumni->phone))
+            $filledFields++;
+        if (!empty($alumni->major))
+            $filledFields++;
+        if (!empty($alumni->graduation_year))
+            $filledFields++;
+        if (!empty($alumni->birth_date))
+            $filledFields++;
+        if (!empty($alumni->nisn))
+            $filledFields++;
+        if (!empty($alumni->bio))
+            $filledFields++;
+        if (!empty($alumni->avatar) && $alumni->avatar !== 'https://avatar.vercel.sh/' . strtolower(str_replace(" ", "", $alumni->name)))
+            $filledFields++;
+        if (!empty($alumni->skills) && count($alumni->skills) > 0)
+            $filledFields++;
 
         $profileCompletion = ($filledFields / $totalFields) * 100;
 
@@ -172,18 +192,27 @@ class AlumniController extends Controller
     {
         $missing = [];
 
-        if (empty($alumni->name)) $missing[] = 'Nama';
-        if (empty($alumni->email)) $missing[] = 'Email';
-        if (empty($alumni->phone)) $missing[] = 'Nomor Telepon';
-        if (empty($alumni->major)) $missing[] = 'Jurusan';
-        if (empty($alumni->graduation_year)) $missing[] = 'Tahun Lulus';
-        if (empty($alumni->birth_date)) $missing[] = 'Tanggal Lahir';
-        if (empty($alumni->nisn)) $missing[] = 'NISN';
-        if (empty($alumni->bio)) $missing[] = 'Bio/Deskripsi';
+        if (empty($alumni->name))
+            $missing[] = 'Nama';
+        if (empty($alumni->email))
+            $missing[] = 'Email';
+        if (empty($alumni->phone))
+            $missing[] = 'Nomor Telepon';
+        if (empty($alumni->major))
+            $missing[] = 'Jurusan';
+        if (empty($alumni->graduation_year))
+            $missing[] = 'Tahun Lulus';
+        if (empty($alumni->birth_date))
+            $missing[] = 'Tanggal Lahir';
+        if (empty($alumni->nisn))
+            $missing[] = 'NISN';
+        if (empty($alumni->bio))
+            $missing[] = 'Bio/Deskripsi';
         if (empty($alumni->avatar) || $alumni->avatar === 'https://avatar.vercel.sh/' . strtolower(str_replace(" ", "", $alumni->name))) {
             $missing[] = 'Foto Profil';
         }
-        if (empty($alumni->skills) || count($alumni->skills) == 0) $missing[] = 'Keahlian';
+        if (empty($alumni->skills) || count($alumni->skills) == 0)
+            $missing[] = 'Keahlian';
 
         return $missing;
     }
@@ -206,10 +235,13 @@ class AlumniController extends Controller
 
         // Update user name as well if provided
         if (isset($validatedData['name'])) {
-             $user->update(['name' => $validatedData['name']]);
+            $user->update(['name' => $validatedData['name']]);
         }
 
         $alumni->update($validatedData);
+
+        // Broadcast profile update
+        broadcast(new \App\Events\AlumniProfileUpdated($alumni))->toOthers();
 
         return response()->json([
             'id' => $alumni->id,
@@ -367,3 +399,5 @@ class AlumniController extends Controller
         return \Storage::disk('public')->download($document->file_path, $document->file_name);
     }
 }
+
+

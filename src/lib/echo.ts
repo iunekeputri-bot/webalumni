@@ -7,15 +7,14 @@ import Pusher from "pusher-js";
 // Get token with fallback
 const getToken = () => localStorage.getItem("token") || "";
 
+// WebSocket configuration for Reverb - ENABLED
 const echo = new Echo({
-  broadcaster: "pusher",
-  key: "local-websocket-key",
-  cluster: "mt1",
-  wsHost: window.location.hostname,
-  wsPort: 6001,
-  wssPort: 6001,
-  forceTLS: false,
-  disableStats: true,
+  broadcaster: "reverb",
+  key: import.meta.env.VITE_REVERB_APP_KEY,
+  wsHost: import.meta.env.VITE_REVERB_HOST,
+  wsPort: import.meta.env.VITE_REVERB_PORT ?? 8080,
+  wssPort: import.meta.env.VITE_REVERB_PORT ?? 8080,
+  forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? "https") === "https",
   enabledTransports: ["ws", "wss"],
   authEndpoint: `http://${window.location.hostname}:8000/api/broadcasting/auth`,
   auth: {

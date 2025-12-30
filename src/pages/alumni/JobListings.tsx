@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { MapPin, DollarSign, Clock, Briefcase, Search, Loader2, AlertCircle, Building2, Mail, Phone } from "lucide-react";
 import { API_URL } from "@/config/api";
+import { useRealtimeJobs } from "@/hooks/useRealtimeJobs";
 
 interface JobPosting {
   id: number;
@@ -35,6 +36,7 @@ interface JobPosting {
 const JobListings = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  useRealtimeJobs();
 
   const [isLoading, setIsLoading] = useState(true);
   const [jobPostings, setJobPostings] = useState<JobPosting[]>([]);
@@ -51,7 +53,7 @@ const JobListings = () => {
   const fetchAppliedJobs = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_URL}/applications/my`, {
+      const response = await fetch(`${API_URL}/applications`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
@@ -60,7 +62,7 @@ const JobListings = () => {
 
       if (response.ok) {
         const applications = await response.json();
-        const jobIds = new Set(applications.map((app: any) => app.job_posting_id));
+        const jobIds = new Set<number>(applications.map((app: any) => app.job_posting_id));
         setAppliedJobIds(jobIds);
       }
     } catch (error) {
@@ -200,10 +202,17 @@ const JobListings = () => {
               <Card className="h-full p-6 bg-white/60 backdrop-blur-sm border-border/50 hover:shadow-lg hover:border-primary/50 transition-all duration-300 flex flex-col">
                 {/* Header */}
                 <div className="mb-4">
-                  <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-start gap-4 mb-2">
+                    <div className="h-12 w-12 rounded-lg border border-border/50 overflow-hidden flex-shrink-0 bg-white flex items-center justify-center">
+                      {((job as any).company_logo) ? (
+                        <img src={(job as any).company_logo} alt="Company Logo" className="h-full w-full object-cover" />
+                      ) : (
+                        <Building2 className="h-6 w-6 text-muted-foreground" />
+                      )}
+                    </div>
                     <div className="flex-1">
                       <h3 className="text-lg font-bold line-clamp-2">{job.title}</h3>
-                      <p className="text-sm text-primary font-medium">{job.company?.name || "Company"}</p>
+                      <p className="text-sm text-primary font-medium">{(job as any).company_name || job.company?.name || "Perusahaan"}</p>
                     </div>
                   </div>
 

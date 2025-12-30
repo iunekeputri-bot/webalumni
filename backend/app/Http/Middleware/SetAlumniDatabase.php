@@ -103,3 +103,4 @@ class SetAlumniDatabase
         return $next($request);
     }
 }
+

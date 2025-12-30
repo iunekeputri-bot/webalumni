@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\User;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -52,9 +52,13 @@ class AuthController extends Controller
 
         $token = $user->createToken('API Token')->plainTextToken;
 
+        broadcast(new \App\Events\UserRegistered($user));
+
         return response()->json([
             'user' => $user,
             'token' => $token,
         ], 201);
     }
 }
+
+

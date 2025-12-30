@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\JobPosting;
+use App\Models\JobPosting;
 use Illuminate\Http\Request;
 
 class JobPostingController extends Controller
@@ -21,9 +21,9 @@ class JobPostingController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
-                  ->orWhere('position', 'like', "%{$search}%")
-                  ->orWhere('location', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('position', 'like', "%{$search}%")
+                    ->orWhere('location', 'like', "%{$search}%");
             });
         }
 
@@ -85,6 +85,7 @@ class JobPostingController extends Controller
                     'id' => $company->id,
                     'name' => $company->name,
                     'email' => $company->email,
+                    'logo' => $company->logo,
                 ];
             }
 
@@ -143,6 +144,11 @@ class JobPostingController extends Controller
                 \DB::connection('mysql')->table('job_postings')
                     ->where('id', $id)
                     ->increment('views');
+
+                // Retrieve updated job posting for broadcasting
+                $updatedJobPosting = JobPosting::find($id);
+                // Broadcast view update
+                broadcast(new \App\Events\JobViewed($updatedJobPosting, $user))->toOthers();
             } catch (\Exception $e) {
                 \Log::warning("[JobPosting] Failed to increment views: " . $e->getMessage());
             }
@@ -201,6 +207,8 @@ class JobPostingController extends Controller
             'requirements' => $request->requirements,
             'status' => $request->status ?? 'open',
         ]);
+
+        broadcast(new \App\Events\JobPosted($jobPosting))->toOthers();
 
         return response()->json($jobPosting, 201);
     }
@@ -298,7 +306,7 @@ class JobPostingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $applications = \App\JobApplication::with(['user', 'alumni'])
+        $applications = \App\Models\JobApplication::with(['user', 'alumni'])
             ->where('job_posting_id', $id)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -380,8 +388,8 @@ class JobPostingController extends Controller
                 $search = $request->input('search');
                 $query->where(function ($q) use ($search) {
                     $q->where('title', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%")
-                      ->orWhere('location', 'like', "%{$search}%");
+                        ->orWhere('description', 'like', "%{$search}%")
+                        ->orWhere('location', 'like', "%{$search}%");
                 });
             }
 
@@ -405,6 +413,7 @@ class JobPostingController extends Controller
                     ->first();
 
                 $job->company_name = $company ? $company->name : 'Unknown';
+                $job->company_logo = $company ? $company->logo : null;
                 return $job;
             });
 
@@ -473,5 +482,7 @@ class JobPostingController extends Controller
         }
     }
 }
+
+
 
 

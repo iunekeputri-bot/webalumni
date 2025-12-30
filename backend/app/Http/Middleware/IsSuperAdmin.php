@@ -48,3 +48,4 @@ class IsSuperAdmin
         return response()->json(['message' => 'Unauthorized - Super admin access required'], 403);
     }
 }
+

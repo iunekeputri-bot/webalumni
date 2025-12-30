@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\JobApplication;
-use App\JobPosting;
-use App\Document;
-use App\Message;
+use App\Models\JobApplication;
+use App\Models\JobPosting;
+use App\Models\Document;
+use App\Models\Message;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -21,9 +21,12 @@ class JobApplicationController extends Controller
      */
     public function getMyApplications(Request $request)
     {
-        $applications = JobApplication::with(['jobPosting' => function ($query) {
-            $query->withTrashed();
-        }, 'jobPosting.company'])
+        $applications = JobApplication::with([
+            'jobPosting' => function ($query) {
+                $query->withTrashed();
+            },
+            'jobPosting.company'
+        ])
             ->where('user_id', $request->user()->id)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -59,7 +62,7 @@ class JobApplicationController extends Controller
         ]);
 
         $user = $request->user();
-        $alumni = \App\Alumni::where('user_id', $user->id)->first();
+        $alumni = \App\Models\Alumni::where('user_id', $user->id)->first();
 
         if (!$alumni) {
             return response()->json(['message' => 'Alumni profile not found'], 404);
@@ -108,8 +111,11 @@ class JobApplicationController extends Controller
                     'job_application_id' => $application->id,
                 ]);
 
+                // Broadcast event
+                broadcast(new \App\Events\JobApplicationSubmitted($application))->toOthers();
+
                 return response()->json([
-                    'application' => $application->load('jobPosting', 'documents'),
+                    'application' => $application->load(['jobPosting.company', 'documents']),
                     'message' => $message,
                     'message_text' => $message->message,
                 ], 201);
@@ -124,9 +130,15 @@ class JobApplicationController extends Controller
      */
     public function getApplicationDetails($applicationId, Request $request)
     {
-        $application = JobApplication::with(['jobPosting' => function ($query) {
-            $query->withTrashed();
-        }, 'alumni', 'user', 'documents'])
+        $application = JobApplication::with([
+            'jobPosting' => function ($query) {
+                $query->withTrashed();
+            },
+            'jobPosting.company',
+            'alumni',
+            'user',
+            'documents'
+        ])
             ->findOrFail($applicationId);
 
         // Check authorization
@@ -161,6 +173,8 @@ class JobApplicationController extends Controller
             'reviewed_at' => now(),
         ]);
 
+        broadcast(new \App\Events\JobApplicationStatusUpdated($application));
+
         return response()->json($application);
     }
 
@@ -187,3 +201,5 @@ class JobApplicationController extends Controller
         return response()->json(['message' => 'Aplikasi berhasil dibatalkan'], 200);
     }
 }
+
+

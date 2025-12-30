@@ -12,7 +12,7 @@ import { useMaintenance } from "@/context/MaintenanceContext";
 import { API_URL } from "@/config/api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 interface User {
   id: number;
@@ -77,20 +77,112 @@ interface Stats {
 const SUPER_ADMIN_SECRET = "superadmin2024secure";
 const SUPER_ADMIN_EMAIL = "superadmin@example.com";
 
+interface SystemResources {
+  cpu_usage: number;
+  memory_usage: number;
+  storage_usage: number;
+  uptime: string;
+  db_latency?: number;
+  network_latency?: number;
+}
+
 const SuperAdminDashboard = () => {
   const { user, logout } = useAuth();
   const { setMaintenanceMode: setGlobalMaintenanceMode } = useMaintenance();
   const navigate = useNavigate();
-  const location = window.location;
+  const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const accessKey = queryParams.get("access");
 
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "users" | "data" | "monitoring" | "database" | "settings">("overview");
   const [users, setUsers] = useState<User[]>([]);
+  const [loginLoading, setLoginLoading] = useState(false);
+  // ... (keep other states normal, just adding loginLoading and isCheckingAuth)
+
+  // Validate super admin access
+  useEffect(() => {
+    const validateAccess = async () => {
+      setIsCheckingAuth(true);
+
+      // 1. Check if user is logged in as super admin
+      if (user && user.role === "admin" && user.email === SUPER_ADMIN_EMAIL) {
+        setIsAuthorized(true);
+        setIsCheckingAuth(false);
+        return;
+      }
+
+      // 2. Check if accessed via secret key (validate with backend)
+      if (accessKey) {
+        try {
+          // Use maintenance status endpoint as a lightweight verification
+          const response = await fetch(`${API_URL}/super-admin/maintenance-status?superadmin_key=${accessKey}`, {
+            headers: {
+              'Accept': 'application/json',
+              'X-Super-Admin-Key': accessKey
+            }
+          });
+
+          if (response.ok) {
+            setIsAuthorized(true);
+            console.log("✅ Super Admin access validated via backend");
+          } else {
+            setIsAuthorized(false);
+            toast({ title: "Akses Ditolak", description: "Key URL tidak valid/kadaluarsa", variant: "destructive" });
+          }
+        } catch (e) {
+          console.error("Validation error", e);
+          setIsAuthorized(false);
+        }
+      } else {
+        setIsAuthorized(false);
+      }
+
+      setIsCheckingAuth(false);
+    };
+
+    validateAccess();
+  }, [user, navigate, accessKey]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [systemResources, setSystemResources] = useState<SystemResources>({
+    cpu_usage: 0,
+    memory_usage: 0,
+    storage_usage: 0,
+    uptime: "Offline",
+    db_latency: 0,
+    network_latency: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // Poll system resources
+  useEffect(() => {
+    if (!isAuthorized) return;
+
+    const fetchResources = async () => {
+      try {
+        const url = new URL(`${API_URL}/super-admin/system-resources`);
+        if (accessKey === SUPER_ADMIN_SECRET) {
+          url.searchParams.append("superadmin_key", SUPER_ADMIN_SECRET);
+        }
+        const response = await fetch(url.toString(), {
+          headers: getAuthHeaders(),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setSystemResources(data);
+        }
+      } catch (error) {
+        console.error("Error fetching system resources:", error);
+      }
+    };
+
+    fetchResources(); // Fetch immediately
+    const interval = setInterval(fetchResources, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [isAuthorized, accessKey]);
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -130,46 +222,9 @@ const SuperAdminDashboard = () => {
     role: "admin" as "admin" | "company",
   });
 
-  // Validate super admin access
-  useEffect(() => {
-    // Check if accessed via secret key
-    if (accessKey === SUPER_ADMIN_SECRET) {
-      // Set a temporary "token" for API requests (will be sent as X-Super-Admin-Key header instead)
-      setIsAuthorized(true);
-      console.log("✅ Super Admin accessed via secret key");
-      return;
-    }
 
-    // Check if user is logged in as super admin
-    if (!user) {
-      // No user and no secret key, redirect to admin login
-      navigate("/admin/auth", { replace: true });
-      return;
-    }
 
-    if (user.role !== "admin" || user.email !== SUPER_ADMIN_EMAIL) {
-      // Not super admin, redirect to appropriate dashboard
-      toast({
-        title: "Akses Ditolak",
-        description: "Anda tidak memiliki akses ke halaman Super Admin",
-        variant: "destructive",
-      });
 
-      if (user.role === "admin") {
-        navigate("/admin/dashboard", { replace: true });
-      } else if (user.role === "company") {
-        navigate("/company/dashboard", { replace: true });
-      } else if (user.role === "alumni") {
-        navigate("/alumni/dashboard", { replace: true });
-      } else {
-        navigate("/", { replace: true });
-      }
-      return;
-    }
-
-    // User is logged in as super admin
-    setIsAuthorized(true);
-  }, [user, navigate, accessKey]);
 
   // Fetch maintenance mode status
   useEffect(() => {
@@ -498,12 +553,17 @@ const SuperAdminDashboard = () => {
   }, [isAuthorized, loadData]);
 
   const handleLogout = () => {
-    // If accessed via URL, just redirect to home
-    if (accessKey === SUPER_ADMIN_SECRET) {
-      navigate("/", { replace: true });
-    } else {
-      // If logged in, use normal logout
+    // If accessed via URL, just clear the key to show lock screen
+    if (accessKey) {
+      setIsAuthorized(false);
+      navigate("/admin/super-admin", { replace: true });
+      return;
+    }
+
+    if (user?.role === "admin" && user?.email === SUPER_ADMIN_EMAIL) {
       logout();
+    } else {
+      navigate("/", { replace: true });
     }
   };
 
@@ -535,16 +595,20 @@ const SuperAdminDashboard = () => {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_URL}/super-admin/users`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(submitData),
       });
 
       if (!response.ok) {
         const error = await response.json();
+        console.error("Create user error:", error);
+
+        // Handle Laravel validation errors
+        if (error.errors) {
+          const errorMessages = Object.values(error.errors).flat().join(', ');
+          throw new Error(errorMessages);
+        }
+
         throw new Error(error.message || "Gagal membuat user");
       }
 
@@ -631,10 +695,7 @@ const SuperAdminDashboard = () => {
         try {
           const response = await fetch(`${API_URL}/super-admin/users/${userId}`, {
             method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/json",
-            },
+            headers: getAuthHeaders(),
           });
 
           if (response.ok) {
@@ -699,11 +760,7 @@ const SuperAdminDashboard = () => {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_URL}/super-admin/users/${userId}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) throw new Error("Gagal hapus user");
@@ -730,11 +787,7 @@ const SuperAdminDashboard = () => {
       const token = localStorage.getItem("token");
       const response = await fetch(`${API_URL}/super-admin/clear-all`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) throw new Error("Gagal clear data");
@@ -862,22 +915,81 @@ const SuperAdminDashboard = () => {
     input.click();
   };
 
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-center space-y-4">
+          <div className="animate-spin inline-block h-12 w-12 border-4 border-primary border-t-transparent rounded-full" />
+          <p className="text-muted-foreground">Memverifikasi akses...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
-      {!isAuthorized && (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
-          <div className="text-center space-y-4">
-            <div className="animate-spin inline-block h-12 w-12 border-4 border-primary border-t-transparent rounded-full" />
-            <div>
-              <p className="text-muted-foreground mb-2">Validating access...</p>
-              <p className="text-xs text-muted-foreground/70">Jika halaman ini terlalu lama,</p>
-              <p className="text-xs text-muted-foreground/70">backend mungkin belum dikonfigurasi untuk super admin key</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {!isAuthorized ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Super Admin Login</CardTitle>
+              <CardDescription>Masukkan Access Key untuk melanjutkan</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setLoginLoading(true);
+                const form = e.target as HTMLFormElement;
+                const input = form.elements.namedItem('key') as HTMLInputElement;
+                const key = input.value;
 
-      {isAuthorized && (
+                try {
+                  const response = await fetch(`${API_URL}/super-admin/maintenance-status?superadmin_key=${key}`, {
+                    headers: {
+                      'Accept': 'application/json',
+                      'X-Super-Admin-Key': key
+                    }
+                  });
+
+                  if (response.ok) {
+                    // Valid key, redirect
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set("access", key);
+                    window.location.href = newUrl.toString();
+                  } else {
+                    toast({
+                      title: "Akses Ditolak",
+                      description: "Key tidak valid",
+                      variant: "destructive"
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: "Error",
+                    description: "Gagal memverifikasi key",
+                    variant: "destructive"
+                  });
+                } finally {
+                  setLoginLoading(false);
+                }
+              }}>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="key">Access Key</Label>
+                    <Input id="key" name="key" type="password" placeholder="Masukkan secret key..." disabled={loginLoading} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loginLoading}>
+                    {loginLoading ? "Memverifikasi..." : "Login"}
+                  </Button>
+                  <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/admin/auth')}>
+                    Login via Admin Account
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
         <div className="min-h-screen bg-gradient-to-br from-background via-background/95 to-muted/20">
           {/* Navigation Header */}
           <motion.nav initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.6 }} className="border-b border-border/50 bg-white/30 backdrop-blur-xl sticky top-0 z-50 shadow-lg">
@@ -928,10 +1040,7 @@ const SuperAdminDashboard = () => {
                     <Database className="h-4 w-4" />
                     <span className="hidden md:inline">Data</span>
                   </TabsTrigger>
-                  <TabsTrigger value="monitoring" className="gap-2">
-                    <Shield className="h-4 w-4" />
-                    <span className="hidden md:inline">Monitor</span>
-                  </TabsTrigger>
+
                   <TabsTrigger value="database" className="gap-2">
                     <Database className="h-4 w-4" />
                     <span className="hidden md:inline">Database</span>
@@ -1018,6 +1127,109 @@ const SuperAdminDashboard = () => {
                       </motion.div>
                     </motion.div>
                   )}
+                  {/* System Monitoring Section */}
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid md:grid-cols-2 gap-6 mt-8">
+                    <Card className="border-2 border-blue-100/50 shadow-md">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Shield className="h-5 w-5 text-blue-600" />
+                          System Monitoring
+                        </CardTitle>
+                        <CardDescription>Monitor kesehatan dan performa sistem</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid md:grid-cols-4 gap-4">
+                          <Card className="bg-blue-50/30 border-blue-100">
+                            <CardHeader className="pb-3 p-4">
+                              <CardDescription className="text-xs">Server Status</CardDescription>
+                              <CardTitle className="text-xl text-green-600 flex items-center gap-1">
+                                <span className="relative flex h-3 w-3 mr-1">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                </span>
+                                Online
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0">
+                              <p className="text-xs text-muted-foreground">Uptime: {systemResources.uptime}</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-green-50/30 border-green-100">
+                            <CardHeader className="pb-3 p-4">
+                              <CardDescription className="text-xs">Database Speed</CardDescription>
+                              <CardTitle className={`text-xl ${!systemResources.db_latency || systemResources.db_latency < 0 ? 'text-red-500' : systemResources.db_latency < 100 ? 'text-green-600' : 'text-orange-500'}`}>
+                                {systemResources.db_latency && systemResources.db_latency > 0 ? `${systemResources.db_latency}ms` : 'Check...'}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0">
+                              <p className="text-xs text-muted-foreground">Query Latency</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-cyan-50/30 border-cyan-100">
+                            <CardHeader className="pb-3 p-4">
+                              <CardDescription className="text-xs">Internet Speed</CardDescription>
+                              <CardTitle className={`text-xl ${!systemResources.network_latency ? 'text-gray-500' : systemResources.network_latency < 100 ? 'text-green-600' : 'text-orange-500'}`}>
+                                {systemResources.network_latency ? `${systemResources.network_latency}ms` : 'Ping...'}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0">
+                              <p className="text-xs text-muted-foreground">Main Server Latency</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-purple-50/30 border-purple-100">
+                            <CardHeader className="pb-3 p-4">
+                              <CardDescription className="text-xs">Active Users</CardDescription>
+                              <CardTitle className="text-xl text-purple-600">{stats?.total_users || 0}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0">
+                              <p className="text-xs text-muted-foreground">Registered Accounts</p>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-2 border-orange-100/50 shadow-md">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5 text-orange-600" />
+                          System Resources
+                        </CardTitle>
+                        <CardDescription>Penggunaan resource server (Realtime)</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-6">
+                          <div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm font-medium flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div> CPU Usage</span>
+                              <span className="text-sm text-muted-foreground">{systemResources.cpu_usage}%</span>
+                            </div>
+                            <div className="w-full bg-muted/50 rounded-full h-2 overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${systemResources.cpu_usage}%` }} transition={{ duration: 0.5 }} className="bg-blue-500 h-2 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]"></motion.div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm font-medium flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500"></div> Memory Usage</span>
+                              <span className="text-sm text-muted-foreground">{systemResources.memory_usage}%</span>
+                            </div>
+                            <div className="w-full bg-muted/50 rounded-full h-2 overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${systemResources.memory_usage}%` }} transition={{ duration: 0.5 }} className="bg-green-500 h-2 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.5)]"></motion.div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-sm font-medium flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-500"></div> Storage Usage</span>
+                              <span className="text-sm text-muted-foreground">{systemResources.storage_usage}%</span>
+                            </div>
+                            <div className="w-full bg-muted/50 rounded-full h-2 overflow-hidden">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${systemResources.storage_usage}%` }} transition={{ duration: 0.5 }} className="bg-orange-500 h-2 rounded-full shadow-[0_0_10px_rgba(249,115,22,0.5)]"></motion.div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 </TabsContent>
 
                 {/* USERS TAB */}
@@ -1238,15 +1450,14 @@ const SuperAdminDashboard = () => {
                                       </td>
                                       <td className="py-3 px-4 cursor-pointer" onClick={() => setSelectedUser(user)}>
                                         <span
-                                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
-                                            isSuperAdmin
-                                              ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-700 border-2 border-blue-300"
-                                              : user.role === "admin"
+                                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${isSuperAdmin
+                                            ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-700 border-2 border-blue-300"
+                                            : user.role === "admin"
                                               ? "bg-blue-100 text-blue-700"
                                               : user.role === "alumni"
-                                              ? "bg-green-100 text-green-700"
-                                              : "bg-purple-100 text-purple-700"
-                                          }`}
+                                                ? "bg-green-100 text-green-700"
+                                                : "bg-purple-100 text-purple-700"
+                                            }`}
                                         >
                                           {isSuperAdmin ? "Super Admin" : user.role === "admin" ? "Admin SMK" : user.role === "alumni" ? "Alumni" : "Perusahaan"}
                                         </span>
@@ -1519,9 +1730,8 @@ const SuperAdminDashboard = () => {
                                     <td className="py-3 px-4 text-muted-foreground">{app.job_title || `Job #${app.job_posting_id}`}</td>
                                     <td className="py-3 px-4">
                                       <span
-                                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                          app.status === "accepted" ? "bg-green-100 text-green-700" : app.status === "rejected" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
-                                        }`}
+                                        className={`px-2 py-1 rounded-full text-xs font-semibold ${app.status === "accepted" ? "bg-green-100 text-green-700" : app.status === "rejected" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+                                          }`}
                                       >
                                         {app.status}
                                       </span>
@@ -1554,89 +1764,7 @@ const SuperAdminDashboard = () => {
                   </Card>
                 </TabsContent>
 
-                {/* MONITORING TAB */}
-                <TabsContent value="monitoring" className="space-y-6">
-                  <Card className="border-2">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Shield className="h-5 w-5" />
-                        System Monitoring
-                      </CardTitle>
-                      <CardDescription>Monitor kesehatan dan performa sistem</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid md:grid-cols-3 gap-4">
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardDescription>Server Status</CardDescription>
-                            <CardTitle className="text-2xl">🟢 Online</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground">Uptime: 99.9%</p>
-                          </CardContent>
-                        </Card>
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardDescription>Database Status</CardDescription>
-                            <CardTitle className="text-2xl">🟢 Connected</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground">Response: ~50ms</p>
-                          </CardContent>
-                        </Card>
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardDescription>Active Sessions</CardDescription>
-                            <CardTitle className="text-2xl">{stats?.total_users || 0}</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground">Current users</p>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    </CardContent>
-                  </Card>
 
-                  <Card className="border-2">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <BarChart3 className="h-5 w-5" />
-                        System Resources
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div>
-                          <div className="flex justify-between mb-2">
-                            <span className="text-sm font-medium">CPU Usage</span>
-                            <span className="text-sm text-muted-foreground">23%</span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div className="bg-blue-500 h-2 rounded-full" style={{ width: "23%" }}></div>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between mb-2">
-                            <span className="text-sm font-medium">Memory Usage</span>
-                            <span className="text-sm text-muted-foreground">45%</span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div className="bg-green-500 h-2 rounded-full" style={{ width: "45%" }}></div>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between mb-2">
-                            <span className="text-sm font-medium">Storage Usage</span>
-                            <span className="text-sm text-muted-foreground">67%</span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div className="bg-orange-500 h-2 rounded-full" style={{ width: "67%" }}></div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
 
                 {/* DATABASE TAB */}
                 <TabsContent value="database" className="space-y-6">
@@ -1834,15 +1962,14 @@ const SuperAdminDashboard = () => {
                     <div>
                       <Label className="text-sm">Role</Label>
                       <div
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${
-                          selectedUser.role === "admin" && selectedUser.email === "superadmin@example.com"
-                            ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-700 border-2 border-blue-300"
-                            : selectedUser.role === "admin"
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${selectedUser.role === "admin" && selectedUser.email === "superadmin@example.com"
+                          ? "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-700 border-2 border-blue-300"
+                          : selectedUser.role === "admin"
                             ? "bg-blue-100 text-blue-700"
                             : selectedUser.role === "alumni"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-purple-100 text-purple-700"
-                        }`}
+                              ? "bg-green-100 text-green-700"
+                              : "bg-purple-100 text-purple-700"
+                          }`}
                       >
                         {selectedUser.role === "admin" && selectedUser.email === "superadmin@example.com" ? "Super Admin" : selectedUser.role === "admin" ? "Admin SMK" : selectedUser.role === "alumni" ? "Alumni" : "Perusahaan"}
                       </div>

@@ -66,3 +66,4 @@ class ConversationUpdated implements ShouldBroadcast
         ];
     }
 }
+

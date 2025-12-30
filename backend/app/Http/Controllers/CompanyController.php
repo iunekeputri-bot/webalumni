@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\User;
-use App\JobPosting;
-use App\Message;
-use App\Alumni;
-use App\JobApplication;
+use App\Models\User;
+use App\Models\JobPosting;
+use App\Models\Message;
+use App\Models\Alumni;
+use App\Models\JobApplication;
 use App\Services\DatabaseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -56,6 +56,17 @@ class CompanyController extends Controller
         if ($user->role !== 'company') {
             return response()->json(['message' => 'Only company users can access this'], 403);
         }
+
+        // Convert empty strings to null for nullable fields to prevent validation errors
+        $data = $request->all();
+        $nullableFields = ['phone', 'industry', 'website', 'address', 'city', 'description', 'logo'];
+
+        foreach ($nullableFields as $field) {
+            if (isset($data[$field]) && trim($data[$field]) === '') {
+                $data[$field] = null;
+            }
+        }
+        $request->merge($data);
 
         $validated = $request->validate([
             'name' => 'string|max:255',
@@ -109,7 +120,8 @@ class CompanyController extends Controller
         $activeJobs = JobPosting::where('company_id', $user->id)
             ->where('status', 'active')
             ->count();
-        $totalApplications = JobApplication::whereIn('job_posting_id',
+        $totalApplications = JobApplication::whereIn(
+            'job_posting_id',
             JobPosting::where('company_id', $user->id)->pluck('id')
         )->count();
         $totalMessages = Message::where('receiver_id', $user->id)->count();
@@ -301,3 +313,5 @@ class CompanyController extends Controller
         }
     }
 }
+
+

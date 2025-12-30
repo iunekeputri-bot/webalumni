@@ -32,6 +32,7 @@ interface Activity {
   title: string;
   description: string;
   timestamp: string;
+  status?: string;
   icon: React.ReactNode;
   actionUrl?: string;
 }
@@ -59,6 +60,8 @@ interface ProfileDetails {
   [key: string]: unknown;
 }
 
+import { useRealtimeActivities } from "@/hooks/useRealtimeActivities";
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -68,6 +71,14 @@ const Dashboard = () => {
   const [documentsCount, setDocumentsCount] = useState(0);
   const [jobsCount, setJobsCount] = useState(0);
   const [applicationsData, setApplicationsData] = useState<Application[]>([]);
+
+  // Initialize user ID for chat
+  const alumniUserId = typeof user?.id === "string" ? parseInt(user.id) : user?.id || 0;
+
+  // Real-time updates for activities
+  useRealtimeActivities(alumniUserId, () => {
+    fetchActivities(); // Refresh activities when update received
+  });
   const [chartData, setChartData] = useState(() => {
     // Initialize with current 6 months data
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -85,8 +96,6 @@ const Dashboard = () => {
     return cached ? JSON.parse(cached) : [];
   });
 
-  // Initialize user ID for chat
-  const alumniUserId = typeof user?.id === "string" ? parseInt(user.id) : user?.id || 1;
   const { conversations } = useChat(alumniUserId);
   const totalUnread = Array.isArray(conversations) ? conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0) : 0;
 
@@ -114,15 +123,16 @@ const Dashboard = () => {
         const newActivities: Activity[] = data.map((app: Application) => ({
           id: app.id.toString(),
           type: "job",
-          title: `Melamar ke ${app.job_posting?.company?.name || "Perusahaan"}`,
-          description: `Posisi: ${app.job_posting?.title || "Unknown"} - Status: ${app.status}`,
+          title: `Lamaran ke ${app.job_posting?.company?.name || "Perusahaan"}`,
+          description: `${app.job_posting?.title || "Unknown"}`,
+          status: app.status,
           timestamp: new Date(app.created_at).toLocaleDateString("id-ID", {
             day: "numeric",
             month: "long",
             year: "numeric",
           }),
-          icon: <Briefcase className="h-5 w-5 text-white" />,
-          actionUrl: "/alumni/applications",
+          icon: <Briefcase className="h-4 w-4" />,
+          actionUrl: `/alumni/applications/${app.id}`,
         }));
         setActivities(newActivities);
 

@@ -77,6 +77,13 @@ export function useChat(currentUserId: number | null) {
         if (!response.ok) throw new Error("Failed to fetch conversations");
 
         const data = await response.json();
+
+        if (!Array.isArray(data)) {
+          console.error("Invalid conversations format:", data);
+          setConversations([]);
+          return;
+        }
+
         // Ensure user_id is number
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const formattedData = data.map((c: any) => ({
@@ -297,20 +304,12 @@ export function useChat(currentUserId: number | null) {
         });
       });
 
-      // Always add polling as backup for conversations (every 3 seconds)
-      pollingIntervalRef.current = setInterval(() => {
-        fetchConversations(false);
-      }, 3000);
     } catch (error) {
       console.error("WebSocket connection error:", error);
-      // Fallback to polling if WebSocket fails
-      pollingIntervalRef.current = setInterval(() => {
-        fetchConversations(false);
-      }, 3000);
     }
 
     return () => {
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+      // if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
       if (channelRef.current) {
         try {
           if (typeof channelRef.current.stopListening === "function") {
@@ -386,27 +385,12 @@ export function useChat(currentUserId: number | null) {
         }
       });
 
-      // Also add polling as backup to ensure messages arrive even if WebSocket fails
-      // Use ref to get current activeConversation to avoid stale closure
-      messagePollingIntervalRef.current = setInterval(() => {
-        const currentActiveConvo = activeConversationRef.current;
-        if (currentActiveConvo) {
-          fetchMessages(currentActiveConvo.user_id, false);
-        }
-      }, 2000); // Poll every 2 seconds as backup
     } catch (error) {
       console.error("WebSocket message connection error:", error);
-      // Fallback to polling if WebSocket fails
-      messagePollingIntervalRef.current = setInterval(() => {
-        const currentActiveConvo = activeConversationRef.current;
-        if (currentActiveConvo) {
-          fetchMessages(currentActiveConvo.user_id, false);
-        }
-      }, 2000);
     }
 
     return () => {
-      if (messagePollingIntervalRef.current) clearInterval(messagePollingIntervalRef.current);
+      // if (messagePollingIntervalRef.current) clearInterval(messagePollingIntervalRef.current);
       if (messageChannelRef.current) {
         try {
           if (typeof messageChannelRef.current.stopListening === "function") {
@@ -422,7 +406,6 @@ export function useChat(currentUserId: number | null) {
         messageChannelRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId, activeConversation]);
 
   return {

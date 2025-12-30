@@ -34,3 +34,4 @@ class AlumniTemplateExport implements FromArray, WithHeadings, WithTitle
         return 'Alumni Import Template';
     }
 }
+

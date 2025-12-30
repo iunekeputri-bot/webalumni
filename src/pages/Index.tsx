@@ -854,33 +854,7 @@ const Index = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-24 px-6">
-        <div className="container mx-auto max-w-5xl">
-          <div className="bg-primary rounded-2xl p-8 md:p-16 text-center relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-            <div className="relative z-10 space-y-6">
-              <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground">Siap Memulai Karir Anda?</h2>
-              <p className="text-primary-foreground/90 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-                Bergabunglah dengan ribuan alumni profesional dan buka akses ke peluang karir eksklusif dari perusahaan-perusahaan terkemuka. Gratis untuk semua alumni.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                <Button size="lg" variant="secondary" className="h-12 px-8" onClick={() => navigate("/auth")}>
-                  Daftar Sekarang
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="h-12 px-8 bg-transparent text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/10"
-                  onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}
-                >
-                  Hubungi Kami
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+
 
       {/* Contact Section */}
       <section id="contact" className="py-24 bg-muted/30">

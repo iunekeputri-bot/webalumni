@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Document;
+use App\Models\Document;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -97,3 +97,5 @@ class DocumentController extends Controller
         return response()->json(null, 204);
     }
 }
+
+

@@ -49,3 +49,4 @@ class SetAdminDatabase
         return $next($request);
     }
 }
+

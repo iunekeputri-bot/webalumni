@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Message;
-use App\User;
+use App\Models\Message;
+use App\Models\User;
 use App\Events\MessageSent;
 use App\Events\ConversationUpdated;
 use Illuminate\Http\Request;
@@ -64,10 +64,14 @@ class MessageController extends Controller
             ) as partners ON u.id = partners.partner_id
             ORDER BY last_message_time DESC
         ", [
-            $userId, $userId, // last_message
-            $userId, $userId, // last_message_time
+            $userId,
+            $userId, // last_message
+            $userId,
+            $userId, // last_message_time
             $userId,          // unread_count
-            $userId, $userId, $userId // partners
+            $userId,
+            $userId,
+            $userId // partners
         ]);
 
         // Format dates to ISO 8601 to ensure correct timezone handling in frontend
@@ -79,8 +83,8 @@ class MessageController extends Controller
 
         return response()->json($conversations);
     }    /**
-     * Get messages between two users
-     */
+         * Get messages between two users
+         */
     public function getMessages(Request $request, $userId, $otherUserId)
     {
         // If userId is not provided or invalid, use the authenticated user
@@ -90,14 +94,14 @@ class MessageController extends Controller
 
         $messages = Message::where(function ($query) use ($userId, $otherUserId) {
             $query->where('sender_id', $userId)
-                  ->where('receiver_id', $otherUserId);
+                ->where('receiver_id', $otherUserId);
         })->orWhere(function ($query) use ($userId, $otherUserId) {
             $query->where('sender_id', $otherUserId)
-                  ->where('receiver_id', $userId);
+                ->where('receiver_id', $userId);
         })
-        ->with(['sender', 'receiver'])
-        ->orderBy('created_at', 'asc')
-        ->get();
+            ->with(['sender', 'receiver'])
+            ->orderBy('created_at', 'asc')
+            ->get();
 
         // Mark messages as read
         Message::where('sender_id', $otherUserId)
@@ -130,12 +134,23 @@ class MessageController extends Controller
 
         $message->load(['sender', 'receiver']);
 
+        // Broadcast the message
+        broadcast(new MessageSent($message))->toOthers();
+
+        // Broadcast conversation update to sender (to update their list with new last message)
+        $senderConversationData = $this->getConversationData($userId, $validated['receiver_id']);
+        broadcast(new ConversationUpdated($userId, $senderConversationData))->toOthers();
+
+        // Broadcast conversation update to receiver (to update their list with new message/unread count)
+        $receiverConversationData = $this->getConversationData($validated['receiver_id'], $userId);
+        broadcast(new ConversationUpdated($validated['receiver_id'], $receiverConversationData))->toOthers();
+
         // Return response immediately - broadcasting is handled async via polling on frontend
         // This makes the API response instant instead of waiting for WebSocket broadcast
         return response()->json($message, 201);
     }    /**
-     * Mark messages as read
-     */
+         * Mark messages as read
+         */
     public function markAsRead(Request $request)
     {
         $validated = $request->validate([
@@ -159,10 +174,10 @@ class MessageController extends Controller
         // Ensure we are deleting for the logged in user
         $deleted = DB::table('messages')->where(function ($query) use ($currentUserId, $otherUserId) {
             $query->where('sender_id', $currentUserId)
-                  ->where('receiver_id', $otherUserId);
+                ->where('receiver_id', $otherUserId);
         })->orWhere(function ($query) use ($currentUserId, $otherUserId) {
             $query->where('sender_id', $otherUserId)
-                  ->where('receiver_id', $currentUserId);
+                ->where('receiver_id', $currentUserId);
         })->delete();
 
         return response()->json([
@@ -181,10 +196,10 @@ class MessageController extends Controller
 
         $lastMessage = Message::where(function ($query) use ($userId, $otherUserId) {
             $query->where('sender_id', $userId)
-                  ->where('receiver_id', $otherUserId);
+                ->where('receiver_id', $otherUserId);
         })->orWhere(function ($query) use ($userId, $otherUserId) {
             $query->where('sender_id', $otherUserId)
-                  ->where('receiver_id', $userId);
+                ->where('receiver_id', $userId);
         })->orderBy('created_at', 'desc')->first();
 
         $unreadCount = Message::where('sender_id', $otherUserId)
@@ -203,3 +218,5 @@ class MessageController extends Controller
         ];
     }
 }
+
+

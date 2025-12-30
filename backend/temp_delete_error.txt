@@ -1,0 +1,50 @@
+[2025-12-30 05:23:00] local.ERROR: Create user failed: There is no active transaction  
+[2025-12-30 05:25:26] local.INFO: Creating database: admin_31_t3  
+[2025-12-30 05:25:26] local.INFO: Database created successfully: admin_31_t3  
+[2025-12-30 05:25:26] local.INFO: Database verified to exist: admin_31_t3  
+[2025-12-30 05:25:26] local.INFO: Starting migration for database: admin_31_t3  
+[2025-12-30 05:25:26] local.INFO: Temporary connection configured: temp_admin_31_t3  
+[2025-12-30 05:25:26] local.INFO: Executing migrations for: admin_31_t3  
+[2025-12-30 05:25:28] local.INFO: Migration exit code: 0  
+[2025-12-30 05:25:28] local.INFO: Migration output: 
+   INFO  Preparing database.  
+
+  Creating migration table .............................................................................. 25.66ms DONE
+
+   INFO  Running migrations.  
+
+  0001_01_01_000000_create_users_table ................................................................. 135.03ms DONE
+  0001_01_01_000001_create_cache_table .................................................................. 36.68ms DONE
+  0001_01_01_000002_create_jobs_table .................................................................. 114.48ms DONE
+  2025_12_29_161739_create_initial_tables_from_sql ........................................................... 1s DONE
+  2025_12_29_162333_create_personal_access_tokens_table ................................................. 86.76ms DONE
+
+  
+[2025-12-30 05:25:28] local.INFO: Migration completed successfully for: admin_31_t3  
+[2025-12-30 05:25:28] local.INFO: Database migration completed: admin_31_t3  
+[2025-12-30 05:25:28] local.INFO: Admin database created: admin_31_t3 for user t3@gmail.com  
+[2025-12-30 05:25:28] local.ERROR: Create user failed: There is no active transaction  
+[2025-12-30 05:31:27] local.INFO: Creating database: admin_32_t1  
+[2025-12-30 05:31:27] local.INFO: Database created successfully: admin_32_t1  
+[2025-12-30 05:31:27] local.INFO: Database verified to exist: admin_32_t1  
+[2025-12-30 05:31:27] local.INFO: Starting migration for database: admin_32_t1  
+[2025-12-30 05:31:27] local.INFO: Temporary connection configured: temp_admin_32_t1  
+[2025-12-30 05:31:27] local.INFO: Executing migrations for: admin_32_t1  
+[2025-12-30 05:31:29] local.INFO: Migration exit code: 0  
+[2025-12-30 05:31:29] local.INFO: Migration output: 
+   INFO  Preparing database.  
+
+  Creating migration table .............................................................................. 28.73ms DONE
+
+   INFO  Running migrations.  
+
+  0001_01_01_000000_create_users_table ................................................................. 134.28ms DONE
+  0001_01_01_000001_create_cache_table .................................................................. 36.14ms DONE
+  0001_01_01_000002_create_jobs_table .................................................................. 111.59ms DONE
+  2025_12_29_161739_create_initial_tables_from_sql ........................................................... 1s DONE
+  2025_12_29_162333_create_personal_access_tokens_table ................................................. 95.73ms DONE
+
+  
+[2025-12-30 05:31:29] local.INFO: Migration completed successfully for: admin_32_t1  
+[2025-12-30 05:31:29] local.INFO: Database migration completed: admin_32_t1  
+[2025-12-30 05:31:29] local.INFO: Admin database created: admin_32_t1 for user t1@gmail.com  

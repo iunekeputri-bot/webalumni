@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Building2,
   LogOut,
@@ -33,14 +35,20 @@ import {
   Filter,
   Trash2,
   Download,
+  Settings,
+  Link as LinkIcon,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChatLayout } from "@/components/chat/ChatLayout";
 import { useChat } from "@/hooks/useChat";
 import { API_URL } from "@/config/api";
+import { useRealtimeCompanyApplications } from "@/hooks/useRealtimeCompanyApplications";
+import { useRealtimeJobViews } from "@/hooks/useRealtimeJobViews";
+import { useRealtimeAlumniUpdates } from "@/hooks/useRealtimeAlumniUpdates";
 // import { usePresence } from "@/hooks/usePresence"; // DISABLED - causing blank screen
 
 interface Alumni {
@@ -105,16 +113,28 @@ interface JobApplication {
 }
 
 const CompanyDashboard = () => {
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  useRealtimeCompanyApplications();
+  useRealtimeJobViews();
+  useRealtimeAlumniUpdates();
   const [activeTab, setActiveTab] = useState("overview");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAlumni, setSelectedAlumni] = useState<Alumni | null>(null);
   const [messageText, setMessageText] = useState("");
   const [showJobForm, setShowJobForm] = useState(false);
-  const [newJob, setNewJob] = useState({ title: "", location: "", salary: "", jobType: "full-time" });
+  /* const [showJobForm, setShowJobForm] = useState(false); */
+  const [newJob, setNewJob] = useState({
+    title: "",
+    location: "",
+    salary: "",
+    jobType: "full-time",
+    requirements: [] as string[],
+    newRequirement: ""
+  });
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // const [isLoading, setIsLoading] = useState(true); // Removed in favor of useQuery
   const [chartsReady, setChartsReady] = useState(false);
   const [canRenderDashboard, setCanRenderDashboard] = useState(false);
 
@@ -125,7 +145,7 @@ const CompanyDashboard = () => {
 
   // Chat hook for unread message count
   const { conversations } = useChat(user ? parseInt(user.id) : null);
-  const totalUnreadMessages = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+  const totalUnreadMessages = Array.isArray(conversations) ? conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0) : 0;
 
   // Application viewing state
   const [showApplicationsModal, setShowApplicationsModal] = useState(false);
@@ -136,6 +156,19 @@ const CompanyDashboard = () => {
   const [alumni, setAlumni] = useState<Alumni[]>([]);
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [companyName, setCompanyName] = useState(user?.name || "");
+
+  // Company Profile Editing
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    phone: "",
+    industry: "",
+    website: "",
+    address: "",
+    city: "",
+    description: "",
+    logo: "",
+  });
 
   const token = localStorage.getItem("token");
   const getHeaders = () => ({
@@ -169,99 +202,124 @@ const CompanyDashboard = () => {
     };
   }, []);
 
-  // Fetch company data, alumni, and jobs
+  // React Query for data fetching
+  const { data: companyData } = useQuery({
+    queryKey: ['company-data'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/company/me`, { headers: getHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch company data");
+      return res.json();
+    }
+  });
+
+  const { data: alumniDataRaw, isLoading: isLoadingAlumni } = useQuery({
+    queryKey: ['alumni'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/company/alumni`, { headers: getHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch alumni");
+      const json = await res.json();
+      return json.data || [];
+    }
+  });
+
+  const { data: jobsData, isLoading: isLoadingJobs } = useQuery({
+    queryKey: ['job-postings'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/company/jobs`, { headers: getHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch jobs");
+      return res.json();
+    }
+  });
+
+  // Derived state
+  const isLoading = isLoadingAlumni || isLoadingJobs;
+
   useEffect(() => {
-    if (!canRenderDashboard) return;
+    if (companyData) {
+      setCompanyName(companyData.name);
+      setProfileForm({
+        name: companyData.name || "",
+        phone: companyData.phone || "",
+        industry: companyData.industry || "",
+        website: companyData.website || "",
+        address: companyData.address || "",
+        city: companyData.city || "",
+        description: companyData.description || "",
+        logo: companyData.logo || "",
+      });
+    }
+  }, [companyData]);
 
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        let jobsData: JobPosting[] = [];
+  useEffect(() => {
+    if (jobsData) {
+      setJobs(jobsData);
+    }
+  }, [jobsData]);
 
-        // Fetch company info
-        const companyRes = await fetch(`${API_URL}/company/me`, {
-          headers: getHeaders(),
-        });
-        if (companyRes.ok) {
-          const companyData = await companyRes.json();
-          setCompanyName(companyData.name);
+  useEffect(() => {
+    if (alumniDataRaw) {
+      const totalFields = 8;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const transformedData: Alumni[] = alumniDataRaw.map((alum: any) => {
+        let filled = 0;
+
+        let parsedSkills: string[] = [];
+        try {
+          if (Array.isArray(alum.skills)) {
+            parsedSkills = alum.skills.map(String);
+          } else if (typeof alum.skills === 'string') {
+            try {
+              const parsed = JSON.parse(alum.skills);
+              parsedSkills = Array.isArray(parsed) ? parsed.map(String) : [];
+            } catch {
+              parsedSkills = [alum.skills];
+            }
+          }
+        } catch (e) {
+          parsedSkills = [];
         }
 
-        // Fetch alumni data from all admin databases
-        const alumniRes = await fetch(`${API_URL}/company/alumni`, {
-          headers: getHeaders(),
-        });
-        if (!alumniRes.ok) throw new Error("Failed to fetch alumni");
-        const alumniResponse = await alumniRes.json();
-        const alumniData = alumniResponse.data || [];
+        if (alum.user_id || alum.id) filled++;
+        if (alum.name) filled++;
+        if (alum.email) filled++;
+        if (alum.phone) filled++;
+        if (parsedSkills.length > 0) filled++;
+        if (alum.work_status) filled++;
+        if (alum.major) filled++;
+        if (alum.graduation_year) filled++;
+        const profileCompletion = Math.round((filled / totalFields) * 100);
+        const alumName = String(alum.name || "");
 
-        // Hitung profileCompletion dinamis
-        const totalFields = 8; // id, name, email, phone, skills, status, major, graduationYear
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const transformedData: Alumni[] = alumniData.map((alum: any) => {
-          let filled = 0;
-          if (alum.user_id || alum.id) filled++;
-          if (alum.name) filled++;
-          if (alum.email) filled++;
-          if (alum.phone) filled++;
-          if (Array.isArray(alum.skills) && alum.skills.length > 0) filled++;
-          if (alum.work_status) filled++;
-          if (alum.major) filled++;
-          if (alum.graduation_year) filled++;
-          const profileCompletion = Math.round((filled / totalFields) * 100);
-          const alumName = String(alum.name || "");
-          return {
-            id: String(alum.user_id || alum.id),
-            name: alum.name,
-            email: alum.email,
-            phone: alum.phone || "N/A",
-            skills: Array.isArray(alum.skills) ? alum.skills : [],
-            status: alum.work_status || "siap_bekerja",
-            profileCompletion,
-            avatar: alum.avatar || `https://avatar.vercel.sh/${alumName.replace(/\s+/g, "")}`,
-            major: alum.major,
-            graduationYear: alum.graduation_year,
-            bio: alum.bio || `Alumni dari ${alum.major}, lulus tahun ${alum.graduation_year}`,
-            viewed: false,
-            contacted: false,
-            liked: false,
-            admin_name: alum.admin_name,
-            admin_email: alum.admin_email,
-            source_database: alum.source_database,
-          };
-        });
+        return {
+          id: String(alum.user_id || alum.id),
+          name: alum.name,
+          email: alum.email,
+          phone: alum.phone || "N/A",
+          skills: parsedSkills,
+          status: alum.work_status || "siap_bekerja",
+          profileCompletion,
+          avatar: alum.avatar || `https://avatar.vercel.sh/${alumName.replace(/\s+/g, "")}`,
+          major: alum.major,
+          graduationYear: alum.graduation_year,
+          bio: alum.bio || `Alumni dari ${alum.major}, lulus tahun ${alum.graduation_year}`,
+          viewed: false,
+          contacted: false,
+          liked: false,
+          admin_name: alum.admin_name,
+          admin_email: alum.admin_email,
+          source_database: alum.source_database,
+        };
+      });
+      setAlumni(transformedData);
+    }
+  }, [alumniDataRaw]);
 
-        setAlumni(transformedData);
-
-        // Fetch company's job postings
-        const jobsRes = await fetch(`${API_URL}/company/jobs`, {
-          headers: getHeaders(),
-        });
-        if (jobsRes.ok) {
-          jobsData = await jobsRes.json();
-          setJobs(jobsData);
-        }
-
-        const institutionCount = new Set(transformedData.map((a) => a.admin_name).filter(Boolean)).size;
-        toast({
-          title: "Data Dimuat! ✅",
-          description: `${transformedData.length} alumni dari ${institutionCount} institusi & ${jobsData.length} lowongan berhasil dimuat`,
-        });
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        toast({
-          title: "Error",
-          description: "Gagal memuat data. Pastikan backend berjalan.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canRenderDashboard]);
+  useEffect(() => {
+    // Initial load toast
+    if (!isLoading && canRenderDashboard) {
+      // Only show if data is loaded
+    }
+  }, [isLoading, canRenderDashboard]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setChartsReady(true), 150);
@@ -510,7 +568,7 @@ const CompanyDashboard = () => {
           location: newJob.location,
           salary: newJob.salary,
           job_type: newJob.jobType,
-          requirements: [],
+          requirements: newJob.requirements,
           status: "open",
         }),
       });
@@ -540,7 +598,7 @@ const CompanyDashboard = () => {
         });
       }
 
-      setNewJob({ title: "", location: "", salary: "", jobType: "full-time" });
+      setNewJob({ title: "", location: "", salary: "", jobType: "full-time", requirements: [], newRequirement: "" });
       setEditingJobId(null);
       setShowJobForm(false);
     } catch (error) {
@@ -559,6 +617,8 @@ const CompanyDashboard = () => {
       location: job.location,
       salary: job.salary,
       jobType: job.job_type || "full-time",
+      requirements: Array.isArray(job.requirements) ? job.requirements : [],
+      newRequirement: ""
     });
     setEditingJobId(job.id);
     setShowJobForm(true);
@@ -643,7 +703,39 @@ const CompanyDashboard = () => {
     }
   };
 
-  const filteredAlumni = alumni.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.skills.some((s) => s.toLowerCase().includes(searchQuery.toLowerCase())));
+  const handleUpdateProfile = async () => {
+    try {
+      const response = await fetch(`${API_URL}/company/me`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify(profileForm),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update profile");
+      }
+
+      const data = await response.json();
+      setCompanyName(data.data.name);
+      queryClient.invalidateQueries({ queryKey: ['company-data'] });
+      setShowProfileModal(false);
+
+      toast({
+        title: "Sukses ✅",
+        description: "Profil perusahaan berhasil diperbarui",
+      });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast({
+        title: "Error",
+        description: "Gagal memperbarui profil",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredAlumni = alumni.filter((a) => (a.name || "").toLowerCase().includes((searchQuery || "").toLowerCase()) || (Array.isArray(a.skills) && a.skills.some((s) => typeof s === 'string' && s.toLowerCase().includes((searchQuery || "").toLowerCase()))));
 
   const handleLogout = () => {
     logout();
@@ -655,15 +747,31 @@ const CompanyDashboard = () => {
       <motion.nav initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.6 }} className="border-b border-border/50 bg-white/30 backdrop-blur-xl sticky top-0 z-50 shadow-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <motion.div className="flex items-center gap-3" whileHover={{ scale: 1.05 }}>
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-                <Building2 className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Perusahaan</p>
-                <p className="text-lg font-bold">{companyName}</p>
-              </div>
-            </motion.div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <motion.div className="flex items-center gap-3 cursor-pointer" whileHover={{ scale: 1.05 }}>
+                  <div className="h-10 w-10 rounded-lg flex items-center justify-center shadow-lg overflow-hidden bg-white">
+                    {companyData?.logo ? (
+                      <img src={companyData.logo} alt="Logo" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                        <Building2 className="h-6 w-6 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Perusahaan</p>
+                    <p className="text-lg font-bold">{companyName}</p>
+                  </div>
+                </motion.div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem onClick={() => setShowProfileModal(true)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Edit Profil Perusahaan</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <div className="flex items-center gap-4">
               <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => setActiveTab("overview")} className="p-2 hover:bg-muted rounded-lg transition-colors">
@@ -682,7 +790,7 @@ const CompanyDashboard = () => {
       <div className="container mx-auto px-4 py-8">
         <motion.div key={activeTab} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 lg:w-auto gap-2 bg-white/40 backdrop-blur-xl border border-white/50 p-1 rounded-2xl shadow-lg mb-8">
+            <TabsList className="grid w-full grid-cols-5 lg:w-auto gap-2 bg-white/40 backdrop-blur-xl border border-white/50 p-1 rounded-2xl shadow-lg mb-8">
               <TabsTrigger value="overview" className="gap-2">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden md:inline">Ringkasan</span>
@@ -702,6 +810,11 @@ const CompanyDashboard = () => {
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold animate-pulse">{totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}</span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="profile" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                <span className="hidden md:inline">Profil</span>
+              </TabsTrigger>
+
             </TabsList>
 
             {/* OVERVIEW TAB */}
@@ -949,10 +1062,10 @@ const CompanyDashboard = () => {
                                 alum.status === "siap_bekerja"
                                   ? "bg-green-500/20 text-green-700"
                                   : alum.status === "mencari_peluang"
-                                  ? "bg-blue-500/20 text-blue-700"
-                                  : alum.status === "melanjutkan_pendidikan"
-                                  ? "bg-purple-500/20 text-purple-700"
-                                  : "bg-gray-500/20 text-gray-700"
+                                    ? "bg-blue-500/20 text-blue-700"
+                                    : alum.status === "melanjutkan_pendidikan"
+                                      ? "bg-purple-500/20 text-purple-700"
+                                      : "bg-gray-500/20 text-gray-700"
                               }
                             >
                               {alum.status === "siap_bekerja" ? "✓ Siap Bekerja" : alum.status === "mencari_peluang" ? "🔍 Mencari Peluang" : alum.status === "melanjutkan_pendidikan" ? "🎓 Melanjutkan Pendidikan" : "⏳ Belum Siap"}
@@ -1013,7 +1126,7 @@ const CompanyDashboard = () => {
                           onClick={() => {
                             setShowJobForm(false);
                             setEditingJobId(null);
-                            setNewJob({ title: "", location: "", salary: "", jobType: "full-time" });
+                            setNewJob({ title: "", location: "", salary: "", jobType: "full-time", requirements: [], newRequirement: "" });
                           }}
                           className="p-1 hover:bg-muted rounded-lg transition-colors"
                         >
@@ -1034,13 +1147,68 @@ const CompanyDashboard = () => {
                           <option value="contract">Contract</option>
                           <option value="internship">Internship</option>
                         </select>
-                        <div className="flex gap-2">
+
+                        <div className="space-y-2">
+                          <Label>Persyaratan</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Tambah persyaratan (contoh: Menguasai React.js)"
+                              value={newJob.newRequirement}
+                              onChange={(e) => setNewJob({ ...newJob, newRequirement: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  if (newJob.newRequirement?.trim()) {
+                                    setNewJob({
+                                      ...newJob,
+                                      requirements: [...(newJob.requirements || []), newJob.newRequirement.trim()],
+                                      newRequirement: ""
+                                    });
+                                  }
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                if (newJob.newRequirement?.trim()) {
+                                  setNewJob({
+                                    ...newJob,
+                                    requirements: [...(newJob.requirements || []), newJob.newRequirement.trim()],
+                                    newRequirement: ""
+                                  });
+                                }
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {(newJob.requirements || []).map((req, idx) => (
+                              <Badge key={idx} variant="secondary" className="gap-1 pl-3 pr-1 py-1">
+                                {req}
+                                <button
+                                  onClick={() => {
+                                    const newReqs = [...(newJob.requirements || [])];
+                                    newReqs.splice(idx, 1);
+                                    setNewJob({ ...newJob, requirements: newReqs });
+                                  }}
+                                  className="hover:bg-red-500 hover:text-white rounded-full p-0.5 transition-colors"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mt-4">
                           <Button
                             variant="outline"
                             onClick={() => {
                               setShowJobForm(false);
                               setEditingJobId(null);
-                              setNewJob({ title: "", location: "", salary: "", jobType: "full-time" });
+                              setNewJob({ title: "", location: "", salary: "", jobType: "full-time", requirements: [], newRequirement: "" });
                             }}
                             className="flex-1"
                           >
@@ -1118,6 +1286,103 @@ const CompanyDashboard = () => {
               </div>
             </TabsContent>
 
+
+            {/* PROFILE TAB */}
+            <TabsContent value="profile" className="space-y-6">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}>
+                <Card className="bg-gradient-to-br from-white/80 to-white/40 backdrop-blur-xl border border-white/50 shadow-2xl overflow-hidden">
+                  <div className="h-32 bg-white relative border-b border-border/50">
+                    <div className="absolute -bottom-16 left-8">
+                      <Avatar className="h-32 w-32 border-4 border-white shadow-xl">
+                        <AvatarImage src={companyData?.logo} />
+                        <AvatarFallback className="text-4xl bg-muted text-primary font-bold">
+                          {companyName ? companyName.charAt(0).toUpperCase() : "C"}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div className="absolute top-4 right-4">
+                      <Button
+                        onClick={() => setShowProfileModal(true)}
+                        variant="outline"
+                        className="bg-white/50 hover:bg-white/80"
+                      >
+                        <Settings className="w-4 h-4 mr-2" />
+                        Edit Profil
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="pt-20 px-8 pb-8">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
+                          {companyName}
+                        </h1>
+                        <p className="text-muted-foreground text-lg flex items-center gap-2 mt-1">
+                          {companyData?.industry && <Badge variant="secondary">{companyData.industry}</Badge>}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-8 mb-8">
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold border-b pb-2">Kontak</h3>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors p-3 rounded-lg hover:bg-muted/50">
+                            <Mail className="w-5 h-5 text-primary" />
+                            <span>{companyData?.email || "-"}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors p-3 rounded-lg hover:bg-muted/50">
+                            <Phone className="w-5 h-5 text-primary" />
+                            <span>{companyData?.phone || "-"}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors p-3 rounded-lg hover:bg-muted/50">
+                            <MapPin className="w-5 h-5 text-primary" />
+                            <span>{companyData?.address || "-"} {companyData?.city ? `, ${companyData.city}` : ""}</span>
+                          </div>
+                          {companyData?.website && (
+                            <div className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors p-3 rounded-lg hover:bg-muted/50">
+                              <LinkIcon className="w-5 h-5 text-primary" />
+                              <a href={companyData.website} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-600">
+                                {companyData.website}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold border-b pb-2">Tentang Perusahaan</h3>
+                        <div className="p-4 bg-muted/30 rounded-xl leading-relaxed text-muted-foreground min-h-[150px]">
+                          {companyData?.description || "Belum ada deskripsi perusahaan."}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t">
+                      <div className="text-center p-4 bg-primary/5 rounded-xl border border-primary/10">
+                        <p className="text-3xl font-bold text-primary">{jobs.length}</p>
+                        <p className="text-sm text-muted-foreground">Total Lowongan</p>
+                      </div>
+                      <div className="text-center p-4 bg-green-500/5 rounded-xl border border-green-500/10">
+                        <p className="text-3xl font-bold text-green-600">{jobs.filter(j => j.status === 'open').length}</p>
+                        <p className="text-sm text-muted-foreground">Lowongan Aktif</p>
+                      </div>
+                      <div className="text-center p-4 bg-orange-500/5 rounded-xl border border-orange-500/10">
+                        <p className="text-3xl font-bold text-orange-600">{jobs.reduce((acc, job) => acc + (job.views || 0), 0)}</p>
+                        <p className="text-sm text-muted-foreground">Total Dilihat</p>
+                      </div>
+                      <div className="text-center p-4 bg-purple-500/5 rounded-xl border border-purple-500/10">
+                        <p className="text-3xl font-bold text-purple-600">{jobs.reduce((acc, job) => acc + (job.applicants || 0), 0)}</p>
+                        <p className="text-sm text-muted-foreground">Total Pelamar</p>
+                      </div>
+                    </div>
+
+                  </div>
+                </Card>
+              </motion.div>
+            </TabsContent>
+
             {/* MESSAGES TAB */}
             <TabsContent value="messages">
               <ChatLayout currentUserId={user ? parseInt(user.id) : 0} selectedAlumni={selectedAlumni} />
@@ -1159,19 +1424,19 @@ const CompanyDashboard = () => {
                             selectedAlumni.status === "siap_bekerja"
                               ? "bg-green-500/20 text-green-700"
                               : selectedAlumni.status === "mencari_peluang"
-                              ? "bg-blue-500/20 text-blue-700"
-                              : selectedAlumni.status === "melanjutkan_pendidikan"
-                              ? "bg-purple-500/20 text-purple-700"
-                              : "bg-gray-500/20 text-gray-700"
+                                ? "bg-blue-500/20 text-blue-700"
+                                : selectedAlumni.status === "melanjutkan_pendidikan"
+                                  ? "bg-purple-500/20 text-purple-700"
+                                  : "bg-gray-500/20 text-gray-700"
                           }
                         >
                           {selectedAlumni.status === "siap_bekerja"
                             ? "✓ Siap Bekerja"
                             : selectedAlumni.status === "mencari_peluang"
-                            ? "🔍 Mencari Peluang"
-                            : selectedAlumni.status === "melanjutkan_pendidikan"
-                            ? "🎓 Melanjutkan Pendidikan"
-                            : "⏳ Belum Siap"}
+                              ? "🔍 Mencari Peluang"
+                              : selectedAlumni.status === "melanjutkan_pendidikan"
+                                ? "🎓 Melanjutkan Pendidikan"
+                                : "⏳ Belum Siap"}
                         </Badge>
                       </div>
                     </div>
@@ -1289,10 +1554,10 @@ const CompanyDashboard = () => {
                                 app.status === "pending"
                                   ? "bg-yellow-500/20 text-yellow-700"
                                   : app.status === "accepted"
-                                  ? "bg-green-500/20 text-green-700"
-                                  : app.status === "rejected"
-                                  ? "bg-red-500/20 text-red-700"
-                                  : "bg-blue-500/20 text-blue-700"
+                                    ? "bg-green-500/20 text-green-700"
+                                    : app.status === "rejected"
+                                      ? "bg-red-500/20 text-red-700"
+                                      : "bg-blue-500/20 text-blue-700"
                               }
                             >
                               {app.status.toUpperCase()}
@@ -1338,8 +1603,100 @@ const CompanyDashboard = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Edit Company Profile Modal */}
+        <AnimatePresence>
+          {showProfileModal && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowProfileModal(false)} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+              >
+                <div className="p-6 border-b border-border/50 flex items-center justify-between">
+                  <h2 className="text-2xl font-bold">Edit Profil Perusahaan</h2>
+                  <button onClick={() => setShowProfileModal(false)} className="p-2 hover:bg-muted rounded-lg">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="companyName">Nama Perusahaan</Label>
+                    <Input id="companyName" value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="logo">Logo Perusahaan</Label>
+                    <div className="flex items-center gap-4">
+                      {profileForm.logo && (
+                        <div className="h-16 w-16 rounded-lg border border-border overflow-hidden">
+                          <img src={profileForm.logo} alt="Logo Preview" className="h-full w-full object-cover" />
+                        </div>
+                      )}
+                      <Input
+                        id="logo"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setProfileForm({ ...profileForm, logo: reader.result as string });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="industry">Industri</Label>
+                      <Input id="industry" placeholder="Contoh: Teknologi" value={profileForm.industry} onChange={(e) => setProfileForm({ ...profileForm, industry: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Telepon</Label>
+                      <Input id="phone" value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="website">Website</Label>
+                    <Input id="website" placeholder="https://" value={profileForm.website} onChange={(e) => setProfileForm({ ...profileForm, website: e.target.value })} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Alamat</Label>
+                      <Input id="address" value={profileForm.address} onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="city">Kota</Label>
+                      <Input id="city" value={profileForm.city} onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Deskripsi</Label>
+                    <Textarea id="description" rows={4} value={profileForm.description} onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })} />
+                  </div>
+
+                  <div className="pt-4 flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => setShowProfileModal(false)}>Batal</Button>
+                    <Button className="flex-1 bg-gradient-to-r from-primary to-secondary text-white" onClick={handleUpdateProfile}>Simpan Perubahan</Button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </div >
   );
 };
 

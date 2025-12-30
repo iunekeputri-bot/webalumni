@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\User;
-use App\Document;
+use App\Models\User;
+use App\Models\Document;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class DocumentPolicy
@@ -26,3 +26,5 @@ class DocumentPolicy
         return $user->id === $document->user_id;
     }
 }
+
+

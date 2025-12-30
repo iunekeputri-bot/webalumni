@@ -14,6 +14,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { API_URL } from "@/config/api";
+import { useRealtimeAdminUpdates } from "@/hooks/useRealtimeAdminUpdates";
+import { useRealtimeAlumniUpdates } from "@/hooks/useRealtimeAlumniUpdates";
 
 interface Alumni {
   id: string;
@@ -61,6 +63,8 @@ interface FormData {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  useRealtimeAdminUpdates();
+  useRealtimeAlumniUpdates();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"overview" | "alumni" | "jobs" | "settings">("overview");
   const [alumni, setAlumni] = useState<Alumni[]>([]);
@@ -674,12 +678,22 @@ export default function AdminDashboard() {
                           transition={{ delay: 0.7 + idx * 0.1 }}
                           className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-white/60 to-white/40 hover:from-white/80 hover:to-white/60 transition-all border border-white/50"
                         >
-                          <div className="flex-1">
-                            <p className="font-semibold text-sm">{job.title}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{job.company?.name || "Unknown Company"}</p>
-                            <div className="flex gap-2 mt-2">
-                              <span className="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-700">📍 {job.location}</span>
-                              {job.applications_count !== undefined && <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-700">{job.applications_count} Pelamar</span>}
+                          <div className="flex flex-1 gap-3">
+                            <div className="h-10 w-10 rounded-lg border border-border/50 overflow-hidden flex-shrink-0 bg-white flex items-center justify-center">
+                              {/* Use 'any' cast to access logo if not in interface yet, or update interface later */}
+                              {(job.company as any).logo ? (
+                                <img src={(job.company as any).logo} alt="Logo" className="h-full w-full object-cover" />
+                              ) : (
+                                <Building className="h-5 w-5 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-sm">{job.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{job.company?.name || "Unknown Company"}</p>
+                              <div className="flex gap-2 mt-2">
+                                <span className="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-700">📍 {job.location}</span>
+                                {job.applications_count !== undefined && <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-700">{job.applications_count} Pelamar</span>}
+                              </div>
                             </div>
                           </div>
                           <span className="text-xs text-muted-foreground">{new Date(job.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span>
