@@ -326,6 +326,13 @@ const CompanyDashboard = () => {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'overview' || activeTab === 'alumni') {
+      console.log("Refreshing alumni data...");
+      queryClient.invalidateQueries({ queryKey: ['alumni'] });
+    }
+  }, [activeTab, queryClient]);
+
   // Auto-close modal when switching away from alumni or messages tab
   useEffect(() => {
     if (activeTab !== "alumni" && activeTab !== "messages") {
@@ -962,43 +969,49 @@ const CompanyDashboard = () => {
                 <Card className="p-6 bg-white/40 backdrop-blur-xl border border-white/50 shadow-lg">
                   <h3 className="text-lg font-bold mb-6">Alumni Terbaik</h3>
                   <div className="space-y-4">
-                    {alumni.slice(0, 3).map((alum, i) => (
-                      <motion.div
-                        key={alum.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.7 + i * 0.1 }}
-                        className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-white/60 to-white/40 hover:from-white/80 hover:to-white/60 transition-all duration-300 border border-white/50"
-                      >
-                        <div className="flex items-center gap-4 flex-1">
-                          <Avatar className="h-12 w-12 border-2 border-primary/50 shadow-lg">
-                            <AvatarImage src={alum.avatar} />
-                            <AvatarFallback>{alum.name[0]}</AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <p className="font-semibold">{alum.name}</p>
-                            <div className="flex gap-1 flex-wrap mt-1">
-                              {alum.skills.slice(0, 2).map((skill) => (
-                                <Badge key={skill} variant="secondary" className="text-xs">
-                                  {skill}
-                                </Badge>
-                              ))}
+                    {alumni
+                      .sort((a, b) => b.profileCompletion - a.profileCompletion)
+                      .slice(0, 3)
+                      .map((alum, i) => (
+                        <motion.div
+                          key={alum.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.7 + i * 0.1 }}
+                          className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-white/60 to-white/40 hover:from-white/80 hover:to-white/60 transition-all duration-300 border border-white/50"
+                        >
+                          <div className="flex items-center gap-4 flex-1">
+                            <Avatar className="h-12 w-12 border-2 border-primary/50 shadow-lg">
+                              <AvatarImage src={alum.avatar} />
+                              <AvatarFallback>{alum.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <p className="font-semibold">{alum.name}</p>
+                              <div className="flex gap-1 flex-wrap mt-1">
+                                {alum.skills.slice(0, 4).map((skill) => (
+                                  <Badge key={skill} variant="secondary" className="text-xs">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                                {alum.skills.length > 4 && (
+                                  <span className="text-xs text-muted-foreground self-center">+{alum.skills.length - 4}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => {
-                            setSelectedAlumni(alum);
-                            setActiveTab("alumni");
-                          }}
-                          className="px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg font-semibold hover:shadow-lg transition-all"
-                        >
-                          Lihat Detail
-                        </motion.button>
-                      </motion.div>
-                    ))}
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              setSelectedAlumni(alum);
+                              setActiveTab("alumni");
+                            }}
+                            className="px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg font-semibold hover:shadow-lg transition-all"
+                          >
+                            Lihat Detail
+                          </motion.button>
+                        </motion.div>
+                      ))}
                   </div>
                 </Card>
               </motion.div>
@@ -1318,9 +1331,9 @@ const CompanyDashboard = () => {
                         <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
                           {companyName}
                         </h1>
-                        <p className="text-muted-foreground text-lg flex items-center gap-2 mt-1">
+                        <div className="text-muted-foreground text-lg flex items-center gap-2 mt-1">
                           {companyData?.industry && <Badge variant="secondary">{companyData.industry}</Badge>}
-                        </p>
+                        </div>
                       </div>
                     </div>
 
@@ -1399,6 +1412,17 @@ const CompanyDashboard = () => {
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
+                onAnimationComplete={async () => {
+                  if (selectedAlumni) {
+                    try {
+                      const token = localStorage.getItem("token");
+                      await fetch(`${API_URL}/alumni/${selectedAlumni.id}/view`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}` }
+                      });
+                    } catch (e) { console.error("Failed view record", e); }
+                  }
+                }}
                 className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
               >
                 <div className="sticky top-0 bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b border-border/50 flex items-center justify-between">

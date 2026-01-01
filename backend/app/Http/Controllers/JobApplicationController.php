@@ -190,6 +190,13 @@ class JobApplicationController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // Prevent cancelling if already processed
+        if ($application->status !== 'pending') {
+            return response()->json([
+                'message' => 'Lamaran yang sudah diproses (Diterima/Ditolak) tidak dapat dibatalkan.'
+            ], 400);
+        }
+
         // Detach documents
         $application->documents()->detach();
 

@@ -31,8 +31,8 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<ProfileData>(
     initialData || {
-      fullName: "",
-      email: "",
+      fullName: user?.name || "",
+      email: user?.email || "",
       phone: "",
       graduationYear: new Date().getFullYear(),
       major: "",
@@ -458,9 +458,8 @@ const ProfileForm = ({ initialData }: { initialData?: ProfileData }) => {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setFormData({ ...formData, workStatus: option.id as "siap_bekerja" | "mencari_peluang" | "melanjutkan_pendidikan" | "belum_siap" })}
-                  className={`p-6 rounded-xl border-2 font-semibold transition-all duration-300 ${
-                    formData.workStatus === option.id ? `border-primary bg-gradient-to-br ${option.color} shadow-lg scale-105` : `border-border/50 hover:border-primary/50 hover:bg-muted/50`
-                  }`}
+                  className={`p-6 rounded-xl border-2 font-semibold transition-all duration-300 ${formData.workStatus === option.id ? `border-primary bg-gradient-to-br ${option.color} shadow-lg scale-105` : `border-border/50 hover:border-primary/50 hover:bg-muted/50`
+                    }`}
                 >
                   <div className="flex items-center gap-3 justify-center h-full">
                     <motion.div

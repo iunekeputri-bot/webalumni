@@ -264,7 +264,7 @@ class CompanyController extends Controller
                             'nisn',
                             'join_date',
                         ])
-                        ->where('status', 'active') // Only show active alumni
+                        ->whereIn('status', ['active', 'pending', 'siap_bekerja', 'mencari_peluang', 'melanjutkan_pendidikan', 'belum_siap']) // Show all statuses for now
                         ->get();
 
                     foreach ($alumni as $alumnus) {

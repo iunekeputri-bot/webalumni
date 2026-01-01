@@ -136,27 +136,37 @@ class AlumniController extends Controller
     public function me(Request $request)
     {
         $user = $request->user();
-        $alumni = Alumni::where('user_id', $user->id)->firstOrFail();
+        // Self-healing: Create alumni record if it doesn't exist but user is alumni
+        $alumni = Alumni::firstOrCreate(
+            ['user_id' => $user->id],
+            [
+                'name' => $user->name,
+                'email' => $user->email,
+                'join_date' => now(),
+                'status' => 'active',
+                'graduation_year' => date('Y'), // Default
+                'major' => 'Umum', // Default
+                'nisn' => 'P' . time(), // Temporary NISN to avoid unique constraint error if strict
+            ]
+        );
 
         // Calculate profile completion
-        $totalFields = 10;
+        $totalFields = 7; // Reduced from 10 (removed birth_date, nisn, graduation_year check)
         $filledFields = 0;
 
-        // Check required fields
+        // Check required fields (must match getMissingFields)
         if (!empty($alumni->name))
             $filledFields++;
         if (!empty($alumni->email))
             $filledFields++;
         if (!empty($alumni->phone))
             $filledFields++;
-        if (!empty($alumni->major))
+        if (!empty($alumni->major) && $alumni->major !== 'Umum')
             $filledFields++;
-        if (!empty($alumni->graduation_year))
-            $filledFields++;
-        if (!empty($alumni->birth_date))
-            $filledFields++;
-        if (!empty($alumni->nisn))
-            $filledFields++;
+        // graduation_year is always filled by default, not really indicating "completion" unless user changes it.
+        // But let's count it if it's set.
+        // if (!empty($alumni->graduation_year)) $filledFields++; 
+
         if (!empty($alumni->bio))
             $filledFields++;
         if (!empty($alumni->avatar) && $alumni->avatar !== 'https://avatar.vercel.sh/' . strtolower(str_replace(" ", "", $alumni->name)))
@@ -198,14 +208,16 @@ class AlumniController extends Controller
             $missing[] = 'Email';
         if (empty($alumni->phone))
             $missing[] = 'Nomor Telepon';
-        if (empty($alumni->major))
+        if (empty($alumni->major) || $alumni->major === 'Umum')
             $missing[] = 'Jurusan';
-        if (empty($alumni->graduation_year))
-            $missing[] = 'Tahun Lulus';
-        if (empty($alumni->birth_date))
-            $missing[] = 'Tanggal Lahir';
-        if (empty($alumni->nisn))
-            $missing[] = 'NISN';
+        // if (empty($alumni->graduation_year))
+        //     $missing[] = 'Tahun Lulus'; // Graduation year is almost never empty due to default, maybe check if it's realistic?
+        // Let's keep it simple. Only check what's in ProfileForm.
+
+        // date_birth & nisn removed from check because not in ProfileForm
+        // if (empty($alumni->birth_date)) $missing[] = 'Tanggal Lahir';
+        // if (empty($alumni->nisn)) $missing[] = 'NISN';
+
         if (empty($alumni->bio))
             $missing[] = 'Bio/Deskripsi';
         if (empty($alumni->avatar) || $alumni->avatar === 'https://avatar.vercel.sh/' . strtolower(str_replace(" ", "", $alumni->name))) {
@@ -220,7 +232,20 @@ class AlumniController extends Controller
     public function updateMe(Request $request)
     {
         $user = $request->user();
-        $alumni = Alumni::where('user_id', $user->id)->firstOrFail();
+
+        // Self-healing in update as well
+        $alumni = Alumni::firstOrCreate(
+            ['user_id' => $user->id],
+            [
+                'name' => $user->name,
+                'email' => $user->email,
+                'join_date' => now(),
+                'status' => 'active',
+                'graduation_year' => date('Y'),
+                'major' => 'Umum',
+                'nisn' => 'P' . time(),
+            ]
+        );
 
         $validatedData = $request->validate([
             'name' => 'string|max:255',
@@ -396,7 +421,71 @@ class AlumniController extends Controller
             ], 404);
         }
 
-        return \Storage::disk('public')->download($document->file_path, $document->file_name);
+        // Use response()->download with full path to avoid linter error on Storage::download
+        $fullPath = \Storage::disk('public')->path($document->file_path);
+        return response()->download($fullPath, $document->file_name);
+    }
+
+    public function recordProfileView(Request $request, $id)
+    {
+        $viewer = $request->user();
+        if (!$viewer)
+            return response()->json(['error' => 'Unauthorized'], 401);
+
+        // Don't record own views?? Usually yes, don't record own
+        $alumni = Alumni::findOrFail($id);
+        if ($alumni->user_id === $viewer->id) {
+            return response()->json(['message' => 'Own profile view ignored']);
+        }
+
+        // Prevent spam: check if viewed in last hour?
+        // simple unique check per day
+        $exists = \App\Models\ProfileView::where('alumni_id', $id)
+            ->where('viewer_id', $viewer->id)
+            ->whereRaw('DATE(viewed_at) = CURDATE()')
+            ->exists();
+
+        if (!$exists) {
+            \App\Models\ProfileView::create([
+                'alumni_id' => $id,
+                'viewer_id' => $viewer->id,
+                'viewed_at' => now(),
+            ]);
+
+            // Broadcast event manually if needed, or rely on Observer if ProfileView creates event
+            // Note: ProfileView might not be in the Global Observer list yet, but we can add it or just let Frontend fetch
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    public function getProfileViewsStats(Request $request)
+    {
+        $user = $request->user();
+        $alumni = Alumni::where('user_id', $user->id)->firstOrFail();
+
+        // Get views for last 6 months
+        $views = \App\Models\ProfileView::where('alumni_id', $alumni->id)
+            ->where('viewed_at', '>=', now()->subMonths(6))
+            ->orderBy('viewed_at', 'asc')
+            ->get()
+            ->groupBy(function ($date) {
+                return \Carbon\Carbon::parse($date->viewed_at)->format('M'); // Group by Month name (Jan, Feb)
+            });
+
+        // Format for Recharts
+        // We need all 6 months even if empty
+        $months = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month = now()->subMonths($i)->format('M');
+            $months[] = [
+                'month' => $month,
+                'views' => isset($views[$month]) ? $views[$month]->count() : 0,
+                // Applications handled separately or join here
+            ];
+        }
+
+        return response()->json($months);
     }
 }
 

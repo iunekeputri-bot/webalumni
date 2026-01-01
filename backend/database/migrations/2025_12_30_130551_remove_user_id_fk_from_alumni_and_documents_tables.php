@@ -10,22 +10,23 @@ return new class extends Migration {
      */
     public function up(): void
     {
+        // This migration is no longer needed for new databases as the initial table creation
+        // already omits the foreign keys for cross-database compatibility.
+        // Keeping the file for migration history consistency.
+
+        /*
         Schema::table('alumni', function (Blueprint $table) {
-            // Check if foreign key exists before dropping to avoid errors
             try {
                 $table->dropForeign('alumni_user_id_foreign');
-            } catch (\Exception $e) {
-                // Ignore if it doesn't exist
-            }
+            } catch (\Exception $e) {}
         });
 
         Schema::table('documents', function (Blueprint $table) {
             try {
                 $table->dropForeign('documents_user_id_foreign');
-            } catch (\Exception $e) {
-                // Ignore
-            }
+            } catch (\Exception $e) {}
         });
+        */
     }
 
     /**

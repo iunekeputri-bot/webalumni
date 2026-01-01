@@ -9,7 +9,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { TrendingUp, FileText, Briefcase, Eye, Clock, Target, CheckCircle2, Share2, Edit, LogOut, Home, MessageCircle, Award } from "lucide-react";
 import ProfileForm from "./ProfileForm";
 import DocumentsManager from "./DocumentsManager";
@@ -92,7 +92,8 @@ const Dashboard = () => {
   });
   const [skillsData, setSkillsData] = useState<{ name: string; value: number }[]>(() => {
     // Load from cache for instant display
-    const cached = localStorage.getItem("cached_skills");
+    if (!alumniUserId) return [];
+    const cached = localStorage.getItem(`cached_skills_${alumniUserId}`);
     return cached ? JSON.parse(cached) : [];
   });
 
@@ -104,6 +105,9 @@ const Dashboard = () => {
     if (tabParam) {
       setActiveTab(tabParam);
     }
+    // Clean up old non-keyed cache to prevent confusion
+    localStorage.removeItem("cached_skills");
+    localStorage.removeItem("profile_completion");
   }, [searchParams]);
 
   const fetchActivities = async () => {
@@ -136,40 +140,58 @@ const Dashboard = () => {
         }));
         setActivities(newActivities);
 
-        // Generate chart data from applications
-        generateChartData(data);
+        // Generate chart data from applications and views
+        fetchChartStats(data);
       }
     } catch (error) {
       console.error("Failed to fetch activities:", error);
     }
   };
 
-  const generateChartData = (applications: Application[]) => {
+  /* MODIFIED: Fetch profile views stats */
+  const fetchChartStats = async (applications: Application[]) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/alumni/profile-views`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const viewsData = response.ok ? await response.json() : [];
+      generateChartData(applications, viewsData);
+    } catch (e) {
+      console.error("Failed fetch chart stats", e);
+      generateChartData(applications, []);
+    }
+  }
+
+  const generateChartData = (applications: Application[], viewsData: any[] = []) => {
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const currentMonth = new Date().getMonth();
-    const months = [];
 
-    // Generate last 6 months
+    // Map existing views data by month name for easier lookup
+    const viewsMap = new Map();
+    viewsData.forEach(v => viewsMap.set(v.month, v.views));
+
+    const newChartData = [];
     for (let i = 5; i >= 0; i--) {
-      const monthIndex = (currentMonth - i + 12) % 12;
-      months.push(monthNames[monthIndex]);
-    }
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const monthName = monthNames[d.getMonth()];
+      const monthIndex = d.getMonth();
+      const year = d.getFullYear();
 
-    const newChartData = months.map((month, index) => {
-      const monthIndex = (currentMonth - 5 + index + 12) % 12;
       const monthApplications = applications.filter((app: Application) => {
         const appDate = new Date(app.created_at);
-        return appDate.getMonth() === monthIndex && appDate.getFullYear() === new Date().getFullYear();
+        return appDate.getMonth() === monthIndex && appDate.getFullYear() === year;
       });
 
-      return {
-        month,
-        views: Math.max(0, Math.floor(Math.random() * 50) + monthApplications.length * 2),
-        applications: Math.max(0, monthApplications.length),
-      };
-    });
+      newChartData.push({
+        month: monthName,
+        views: viewsMap.get(monthName) || 0,
+        applications: monthApplications.length
+      });
+    }
 
-    console.log("Generated chart data:", newChartData); // Debug log
+    console.log("Generated chart data:", newChartData);
     setChartData(newChartData);
   };
 
@@ -214,19 +236,22 @@ const Dashboard = () => {
 
   const [profileCompletion, setProfileCompletion] = useState(() => {
     // Load from cache immediately for instant display
-    const cached = localStorage.getItem("profile_completion");
+    if (!alumniUserId) return 0;
+    const cached = localStorage.getItem(`profile_completion_${alumniUserId}`);
     return cached ? parseInt(cached) : 0;
   });
   const [profileDetails, setProfileDetails] = useState<ProfileDetails | null>(null);
 
   useEffect(() => {
     document.title = "Dashboard Alumni - Alumni Connect Hub";
-    fetchActivities();
-    fetchProfileData(); // This will update cache in background
-    fetchDocuments();
-    fetchJobs();
+    if (user) {
+      fetchActivities();
+      fetchProfileData(); // This will update cache in background
+      fetchDocuments();
+      fetchJobs();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   const fetchProfileData = async () => {
     try {
@@ -243,7 +268,9 @@ const Dashboard = () => {
         const completion = data.profile_completion || 0;
         setProfileCompletion(completion);
         // Cache for next load
-        localStorage.setItem("profile_completion", completion.toString());
+        if (alumniUserId) {
+          localStorage.setItem(`profile_completion_${alumniUserId}`, completion.toString());
+        }
         setProfileDetails(data.profile_completion_details);
 
         // Generate skills data from profile
@@ -253,17 +280,14 @@ const Dashboard = () => {
             value: 85 - index * 10,
           }));
           setSkillsData(skills);
-          localStorage.setItem("cached_skills", JSON.stringify(skills));
-        } else if (data.major) {
-          // Fallback: generate from major
-          const fallbackSkills = [
-            { name: data.major, value: 85 },
-            { name: "Komunikasi", value: 75 },
-            { name: "Teamwork", value: 70 },
-            { name: "Problem Solving", value: 65 },
-          ];
-          setSkillsData(fallbackSkills);
-          localStorage.setItem("cached_skills", JSON.stringify(fallbackSkills));
+          if (alumniUserId) {
+            localStorage.setItem(`cached_skills_${alumniUserId}`, JSON.stringify(skills));
+          }
+        } else {
+          setSkillsData([]);
+          if (alumniUserId) {
+            localStorage.removeItem(`cached_skills_${alumniUserId}`);
+          }
         }
       }
     } catch (error) {
@@ -538,22 +562,65 @@ const Dashboard = () => {
                     </div>
                     {chartData && chartData.length > 0 ? (
                       <ResponsiveContainer width="100%" height={350}>
-                        <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                          <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                        <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="colorApps" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#a855f7" stopOpacity={0.8} />
+                              <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.4} />
+                          <XAxis
+                            dataKey="month"
+                            stroke="hsl(var(--muted-foreground))"
+                            fontSize={12}
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <YAxis
+                            stroke="hsl(var(--muted-foreground))"
+                            fontSize={12}
+                            tickLine={false}
+                            axisLine={false}
+                            tickFormatter={(value) => `${value}`}
+                          />
                           <Tooltip
                             contentStyle={{
-                              backgroundColor: "hsl(var(--background))",
-                              border: "1px solid hsl(var(--border))",
+                              backgroundColor: "rgba(255, 255, 255, 0.9)",
+                              borderColor: "hsl(var(--border))",
                               borderRadius: "12px",
                               boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                              backdropFilter: "blur(8px)",
                             }}
+                            itemStyle={{ color: "hsl(var(--foreground))" }}
+                            labelStyle={{ fontWeight: "bold", color: "hsl(var(--foreground))" }}
                           />
-                          <Legend />
-                          <Bar dataKey="views" fill="#3b82f6" radius={[12, 12, 0, 0]} name="Tayangan" />
-                          <Bar dataKey="applications" fill="#a855f7" radius={[12, 12, 0, 0]} name="Aplikasi" />
-                        </BarChart>
+                          <Legend verticalAlign="top" height={36} />
+                          <Area
+                            type="linear"
+                            dataKey="views"
+                            stroke="#3b82f6"
+                            strokeWidth={3}
+                            fillOpacity={1}
+                            fill="url(#colorViews)"
+                            name="Tayangan Profil"
+                            activeDot={{ r: 6, strokeWidth: 0 }}
+                          />
+                          <Area
+                            type="linear"
+                            dataKey="applications"
+                            stroke="#a855f7"
+                            strokeWidth={3}
+                            fillOpacity={1}
+                            fill="url(#colorApps)"
+                            name="Aplikasi Dikirim"
+                            activeDot={{ r: 6, strokeWidth: 0 }}
+                          />
+                        </AreaChart>
                       </ResponsiveContainer>
                     ) : (
                       <div className="h-[350px] flex items-center justify-center text-muted-foreground">

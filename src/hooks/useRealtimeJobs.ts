@@ -3,7 +3,7 @@ import echo from '@/lib/echo';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 
-export const useRealtimeJobs = () => {
+export const useRealtimeJobs = (refreshCallback?: () => void) => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
 
@@ -13,8 +13,11 @@ export const useRealtimeJobs = () => {
         channel.listen('JobPosted', (e: any) => {
             console.log('New Job Posted:', e.job);
 
-            // Invalidate the jobs query to refetch
+            // Invalidate the jobs query to refetch (if using Query)
             queryClient.invalidateQueries({ queryKey: ['job-postings'] });
+
+            // Trigger manual refresh if provided
+            if (refreshCallback) refreshCallback();
 
             // Show notification
             toast({
@@ -26,5 +29,5 @@ export const useRealtimeJobs = () => {
         return () => {
             channel.stopListening('JobPosted');
         };
-    }, [queryClient, toast]);
+    }, [queryClient, toast, refreshCallback]);
 };

@@ -44,6 +44,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/company/jobs', [CompanyController::class, 'getJobPostings']);
     Route::get('/company/stats', [CompanyController::class, 'getStats']);
     Route::get('/company/alumni', [CompanyController::class, 'getAllAlumni']);
+    Route::post('/alumni/{id}/view', [AlumniController::class, 'recordProfileView']); // New route
+    Route::get('/alumni/profile-views', [AlumniController::class, 'getProfileViewsStats']); // New route
 
     // Document routes
     Route::get('/documents', [DocumentController::class, 'index']);
