@@ -13,6 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->api(append: [
+            \App\Http\Middleware\UpdateLastSeen::class,
+        ]);
+
         $middleware->alias([
             'set.admin.database' => \App\Http\Middleware\SetAdminDatabase::class,
             'allow.super.admin.key' => \App\Http\Middleware\AllowSuperAdminKey::class,

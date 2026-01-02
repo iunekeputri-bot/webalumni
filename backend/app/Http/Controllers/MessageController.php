@@ -29,6 +29,9 @@ class MessageController extends Controller
                 u.id as user_id,
                 u.name,
                 u.email,
+                u.email,
+                u.logo as avatar,
+                u.last_seen_at,
                 (
                     SELECT message
                     FROM messages m2
@@ -211,7 +214,8 @@ class MessageController extends Controller
             'user_id' => $otherUser->id,
             'name' => $otherUser->name,
             'email' => $otherUser->email,
-            'avatar' => $otherUser->avatar ?? null,
+            'avatar' => $otherUser->logo ?? null,
+            'last_seen_at' => $otherUser->last_seen_at ? $otherUser->last_seen_at->toIso8601String() : null,
             'last_message' => $lastMessage ? $lastMessage->message : '',
             'last_message_time' => $lastMessage ? $lastMessage->created_at->toIso8601String() : now()->toIso8601String(),
             'unread_count' => $unreadCount,

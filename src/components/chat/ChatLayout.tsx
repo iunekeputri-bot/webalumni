@@ -17,12 +17,12 @@ interface ChatLayoutProps {
 }
 
 export function ChatLayout({ currentUserId, selectedAlumni }: ChatLayoutProps) {
-  const { conversations, messages, activeConversation, setActiveConversation, isLoadingConversations, isLoadingMessages, sendMessage, deleteConversation } = useChat(currentUserId);
+  const { conversations, messages, activeConversation, setActiveConversation, isLoadingConversations, isLoadingMessages, sendMessage, deleteConversation, onlineUsers } = useChat(currentUserId);
 
-  // Hardcoded values since presence is disabled
-  const onlineUsers: number[] = [];
+  // Hardcoded values since presence is disabled - REPLACED
+  // const onlineUsers: number[] = [];
   const typingUsers: Record<number, boolean> = {};
-  const sendTyping = (_userId: number) => {};
+  const sendTyping = (_userId: number) => { };
 
   const [isMobileView, setIsMobileView] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
@@ -100,6 +100,7 @@ export function ChatLayout({ currentUserId, selectedAlumni }: ChatLayoutProps) {
               sendTyping(activeConversation.user_id);
             }
           }}
+          isOnline={activeConversation ? onlineUsers.includes(activeConversation.user_id) : false}
         />
       </div>
     </div>

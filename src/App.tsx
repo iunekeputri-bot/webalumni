@@ -21,7 +21,10 @@ import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { MaintenanceProvider, useMaintenance } from "@/context/MaintenanceContext";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
-import { useGlobalRealtime } from "@/hooks/useGlobalRealtime";
+
+
+import { useOnlinePresence } from "@/hooks/useOnlinePresence";
+
 
 const queryClient = new QueryClient();
 
@@ -29,7 +32,8 @@ const AppRoutes = () => {
   const location = useLocation();
   const { isMaintenanceMode, isChecking } = useMaintenance();
   useRealtimeNotifications();
-  useGlobalRealtime();
+  useOnlinePresence();
+
 
   // Check if accessing super admin with secret key
   const searchParams = new URLSearchParams(location.search);

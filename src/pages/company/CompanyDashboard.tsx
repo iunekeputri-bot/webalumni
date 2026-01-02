@@ -156,6 +156,20 @@ const CompanyDashboard = () => {
   const [alumni, setAlumni] = useState<Alumni[]>([]);
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [companyName, setCompanyName] = useState(user?.name || "");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   // Company Profile Editing
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -213,12 +227,11 @@ const CompanyDashboard = () => {
   });
 
   const { data: alumniDataRaw, isLoading: isLoadingAlumni } = useQuery({
-    queryKey: ['alumni'],
+    queryKey: ['alumni', currentPage, debouncedSearch],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/company/alumni`, { headers: getHeaders() });
+      const res = await fetch(`${API_URL}/company/alumni?page=${currentPage}&per_page=9&search=${encodeURIComponent(debouncedSearch)}`, { headers: getHeaders() });
       if (!res.ok) throw new Error("Failed to fetch alumni");
-      const json = await res.json();
-      return json.data || [];
+      return res.json();
     }
   });
 
@@ -258,9 +271,15 @@ const CompanyDashboard = () => {
 
   useEffect(() => {
     if (alumniDataRaw) {
+      const rawData = Array.isArray(alumniDataRaw) ? alumniDataRaw : (alumniDataRaw.data || []);
+
+      if (alumniDataRaw.meta) {
+        setTotalPages(alumniDataRaw.meta.last_page);
+      }
+
       const totalFields = 8;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const transformedData: Alumni[] = alumniDataRaw.map((alum: any) => {
+      const transformedData: Alumni[] = rawData.map((alum: any) => {
         let filled = 0;
 
         let parsedSkills: string[] = [];
@@ -352,11 +371,12 @@ const CompanyDashboard = () => {
   }
 
   // Calculate stats for charts - based on actual data
-  const statusCounts = {
-    siap_bekerja: alumni.filter((a) => a.status === "siap_bekerja").length,
-    mencari_peluang: alumni.filter((a) => a.status === "mencari_peluang").length,
-    melanjutkan_pendidikan: alumni.filter((a) => a.status === "melanjutkan_pendidikan").length,
-    belum_siap: alumni.filter((a) => a.status === "belum_siap").length,
+  // Calculate stats for charts - based on actual data (from backend stats if available)
+  const statusCounts = alumniDataRaw?.stats?.status_counts || {
+    siap_bekerja: 0,
+    mencari_peluang: 0,
+    melanjutkan_pendidikan: 0,
+    belum_siap: 0,
   };
 
   // Chart data: Status distribution
@@ -368,16 +388,9 @@ const CompanyDashboard = () => {
   ];
 
   // Calculate skills frequency
-  const skillCounts: Record<string, number> = {};
-  alumni.forEach((alum) => {
-    alum.skills.forEach((skill) => {
-      skillCounts[skill] = (skillCounts[skill] || 0) + 1;
-    });
-  });
-  const skillsData = Object.entries(skillCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([skill, count]) => ({ name: skill, value: count }));
+  const skillsData = Object.entries(alumniDataRaw?.stats?.skill_counts || {})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map(([name, value]: [string, any]) => ({ name, value: Number(value) }));
 
   const COLORS = ["#3b82f6", "#ec4899", "#8b5cf6", "#f59e0b", "#10b981"];
   const hasStatsData = statsData.some((item) => item.alumni > 0 || item.aplikasi > 0);
@@ -742,7 +755,7 @@ const CompanyDashboard = () => {
     }
   };
 
-  const filteredAlumni = alumni.filter((a) => (a.name || "").toLowerCase().includes((searchQuery || "").toLowerCase()) || (Array.isArray(a.skills) && a.skills.some((s) => typeof s === 'string' && s.toLowerCase().includes((searchQuery || "").toLowerCase()))));
+  const filteredAlumni = alumni;
 
   const handleLogout = () => {
     logout();
@@ -832,8 +845,8 @@ const CompanyDashboard = () => {
                   {
                     icon: Users,
                     label: "Total Alumni",
-                    value: alumni.length.toString(),
-                    desc: `Dari ${new Set(alumni.map((a) => a.admin_name).filter(Boolean)).size} institusi`,
+                    value: (alumniDataRaw?.meta?.total || 0).toString(),
+                    desc: `Dari ${alumniDataRaw?.stats?.total_institutions || 0} institusi`,
                     color: "from-blue-500/20 to-cyan-500/20",
                     textColor: "text-blue-600",
                   },
@@ -848,7 +861,7 @@ const CompanyDashboard = () => {
                   {
                     icon: TrendingUp,
                     label: "Top Skills",
-                    value: new Set(alumni.flatMap((a) => a.skills)).size.toString(),
+                    value: (alumniDataRaw?.stats?.total_unique_skills || 0).toString(),
                     desc: "skill yang berbeda",
                     color: "from-orange-500/20 to-red-500/20",
                     textColor: "text-orange-600",
@@ -856,7 +869,7 @@ const CompanyDashboard = () => {
                   {
                     icon: MessageCircle,
                     label: "Alumni Siap",
-                    value: alumni.filter((a) => a.status === "siap_bekerja").length.toString(),
+                    value: (alumniDataRaw?.stats?.status_counts?.siap_bekerja || 0).toString(),
                     desc: "siap bekerja",
                     color: "from-green-500/20 to-emerald-500/20",
                     textColor: "text-green-600",
@@ -937,13 +950,13 @@ const CompanyDashboard = () => {
                 <Card className="p-6 bg-white/40 backdrop-blur-xl border border-white/50 shadow-lg">
                   <h3 className="text-lg font-bold mb-6">Distribusi Alumni per Institusi</h3>
                   <div className="space-y-3">
-                    {Array.from(new Set(alumni.map((a) => a.admin_name).filter(Boolean)))
-                      .map((adminName) => {
-                        const count = alumni.filter((a) => a.admin_name === adminName).length;
-                        const percentage = (count / alumni.length) * 100;
-                        return { name: adminName, count, percentage };
+                    {Object.entries(alumniDataRaw?.stats?.institution_counts || {})
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      .map(([name, count]: [string, any]) => {
+                        const total = alumniDataRaw?.meta?.total || 1;
+                        const percentage = (count / total) * 100;
+                        return { name, count, percentage };
                       })
-                      .sort((a, b) => b.count - a.count)
                       .map((admin, i) => (
                         <motion.div key={admin.name} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 + i * 0.1 }}>
                           <div className="flex justify-between items-center mb-2">
@@ -1115,6 +1128,33 @@ const CompanyDashboard = () => {
                   </motion.div>
                 ))}
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex justify-center items-center gap-4 mt-8 pb-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="border-primary/20 hover:bg-primary/5 hover:text-primary transition-colors"
+                  >
+                    Previous
+                  </Button>
+
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="border-primary/20 hover:bg-primary/5 hover:text-primary transition-colors"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </TabsContent>
 
             {/* JOBS TAB */}

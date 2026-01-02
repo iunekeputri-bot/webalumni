@@ -14,8 +14,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { API_URL } from "@/config/api";
+import echo from "@/lib/echo";
 import { useRealtimeAdminUpdates } from "@/hooks/useRealtimeAdminUpdates";
-import { useRealtimeAlumniUpdates } from "@/hooks/useRealtimeAlumniUpdates";
 
 interface Alumni {
   id: string;
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   useRealtimeAdminUpdates();
-  useRealtimeAlumniUpdates();
+  // useRealtimeAlumniUpdates(); // Removed as we are handling it manually here to trigger refresh
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"overview" | "alumni" | "jobs" | "settings">("overview");
   const [alumni, setAlumni] = useState<Alumni[]>([]);
@@ -148,6 +148,22 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchAlumni();
     fetchJobPostings();
+
+    // Listen for realtime alumni updates
+    const channel = echo.channel('alumni-updates');
+
+    channel.listen('AlumniProfileUpdated', (e: any) => {
+      console.log('Realtime update received:', e);
+      toast({
+        title: "Update Data",
+        description: `Profil alumni ${e.alumni?.name || ''} telah diperbarui.`,
+      });
+      fetchAlumni(); // Refresh list
+    });
+
+    return () => {
+      channel.stopListening('AlumniProfileUpdated');
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

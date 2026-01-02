@@ -8,8 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { MapPin, DollarSign, Clock, Briefcase, Search, Loader2, AlertCircle, Building2, Mail, Phone } from "lucide-react";
 import { API_URL } from "@/config/api";
-// import { useGlobalRealtime } from "@/hooks/useGlobalRealtime"; // Already in App.tsx but we need invalidation listener here
-import { useQueryClient } from "@tanstack/react-query";
+
 
 interface JobPosting {
   id: number;
@@ -78,21 +77,7 @@ const JobListings = () => {
   const [filterLocation, setFilterLocation] = useState("");
   const [filterJobType, setFilterJobType] = useState("");
 
-  // Listen to global cache updates or custom event
-  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const handleGlobalUpdate = (event: CustomEvent) => {
-      // Check if update is related to jobs
-      if (event.detail && (event.detail.type === 'job_postings' || event.detail.type === 'jobs')) {
-        console.log("Global update detected for jobs, refreshing list...");
-        fetchJobs(searchQuery, filterLocation, filterJobType);
-      }
-    };
-
-    window.addEventListener('global-realtime-update' as any, handleGlobalUpdate);
-    return () => window.removeEventListener('global-realtime-update' as any, handleGlobalUpdate);
-  }, [searchQuery, filterLocation, filterJobType]);
 
   useEffect(() => {
     fetchAppliedJobs();

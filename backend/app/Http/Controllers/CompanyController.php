@@ -173,10 +173,11 @@ class CompanyController extends Controller
 
         try {
             $allAlumni = [];
+            $search = $request->input('search');
 
             // First, get alumni from master database (for old admin accounts without database_name)
             try {
-                $masterAlumni = DB::connection('mysql')->table('alumni')
+                $query = DB::connection('mysql')->table('alumni')
                     ->select([
                         'id',
                         'user_id',
@@ -193,8 +194,17 @@ class CompanyController extends Controller
                         'birth_date',
                         'nisn',
                         'join_date',
-                    ])
-                    ->get();
+                    ]);
+
+                if ($search) {
+                    $query->where(function ($q) use ($search) {
+                        $q->where('name', 'like', "%{$search}%")
+                            ->orWhere('skills', 'like', "%{$search}%")
+                            ->orWhere('major', 'like', "%{$search}%");
+                    });
+                }
+
+                $masterAlumni = $query->get();
 
                 foreach ($masterAlumni as $alumnus) {
                     $alumniData = (array) $alumnus;
@@ -245,7 +255,7 @@ class CompanyController extends Controller
                     DB::purge($connectionName);
 
                     // Query alumni from this admin's database
-                    $alumni = DB::connection($connectionName)
+                    $query = DB::connection($connectionName)
                         ->table('alumni')
                         ->select([
                             'id',
@@ -264,8 +274,17 @@ class CompanyController extends Controller
                             'nisn',
                             'join_date',
                         ])
-                        ->whereIn('status', ['active', 'pending', 'siap_bekerja', 'mencari_peluang', 'melanjutkan_pendidikan', 'belum_siap']) // Show all statuses for now
-                        ->get();
+                        ->whereIn('status', ['active', 'pending', 'siap_bekerja', 'mencari_peluang', 'melanjutkan_pendidikan', 'belum_siap']); // Show all statuses for now
+
+                    if ($search) {
+                        $query->where(function ($q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%")
+                                ->orWhere('skills', 'like', "%{$search}%")
+                                ->orWhere('major', 'like', "%{$search}%");
+                        });
+                    }
+
+                    $alumni = $query->get();
 
                     foreach ($alumni as $alumnus) {
                         // Add admin source information
@@ -288,20 +307,96 @@ class CompanyController extends Controller
 
                         $allAlumni[] = $alumniData;
                     }
-
-                    \Log::info("Loaded " . count($alumni) . " alumni from {$dbName}");
                 } catch (\Exception $e) {
-                    \Log::error("Error loading alumni from {$admin->database_name}: " . $e->getMessage());
+                    \Log::error("Error loading alumni from database {$dbName}: " . $e->getMessage());
                     continue;
                 }
             }
 
-            \Log::info("Total alumni loaded: " . count($allAlumni));
+            // Calculate Stats (Status & Skills)
+            // Calculate Stats (Status & Skills)
+            $stats = [
+                'status_counts' => [
+                    'siap_bekerja' => 0,
+                    'mencari_peluang' => 0,
+                    'melanjutkan_pendidikan' => 0,
+                    'belum_siap' => 0,
+                ],
+                'skill_counts' => [],
+                'institution_counts' => [],
+                'total_unique_skills' => 0,
+                'total_institutions' => 0
+            ];
+
+            $uniqueSkills = [];
+
+            foreach ($allAlumni as $alum) {
+                // Status
+                $workStatus = $alum['work_status'] ?? 'siap_bekerja';
+                if ($workStatus === 'active')
+                    $workStatus = 'siap_bekerja';
+
+                if (array_key_exists($workStatus, $stats['status_counts'])) {
+                    $stats['status_counts'][$workStatus]++;
+                }
+
+                // Skills
+                $skills = $alum['skills'] ?? [];
+                if (is_array($skills)) {
+                    foreach ($skills as $skill) {
+                        if (is_string($skill)) {
+                            $skillName = trim($skill);
+                            if ($skillName) {
+                                if (!isset($stats['skill_counts'][$skillName])) {
+                                    $stats['skill_counts'][$skillName] = 0;
+                                }
+                                $stats['skill_counts'][$skillName]++;
+                                $uniqueSkills[$skillName] = true;
+                            }
+                        }
+                    }
+                }
+
+                // Institution (Admin Name)
+                $adminName = $alum['admin_name'] ?? 'Unknown';
+                if (!isset($stats['institution_counts'][$adminName])) {
+                    $stats['institution_counts'][$adminName] = 0;
+                }
+                $stats['institution_counts'][$adminName]++;
+            }
+
+            // Stats finalization
+            $stats['total_unique_skills'] = count($uniqueSkills);
+            $stats['total_institutions'] = count($stats['institution_counts']);
+
+            // Sort skills by count desc and take top 10
+            arsort($stats['skill_counts']);
+            $stats['skill_counts'] = array_slice($stats['skill_counts'], 0, 10);
+
+            // Sort institutions by count desc
+            arsort($stats['institution_counts']);
+
+            // MANUAL PAGINATION
+            $page = $request->input('page', 1);
+            $perPage = $request->input('per_page', 9); // Default 9 for grid 3x3
+            $total = count($allAlumni);
+            $lastPage = ceil($total / $perPage);
+
+            // Slice the array
+            $slicedAlumni = array_slice($allAlumni, ($page - 1) * $perPage, $perPage);
 
             return response()->json([
                 'success' => true,
-                'total' => count($allAlumni),
-                'data' => $allAlumni,
+                'data' => $slicedAlumni,
+                'stats' => $stats,
+                'meta' => [
+                    'current_page' => (int) $page,
+                    'last_page' => $lastPage,
+                    'per_page' => (int) $perPage,
+                    'total' => $total,
+                    'from' => ($page - 1) * $perPage + 1,
+                    'to' => min($page * $perPage, $total)
+                ]
             ]);
         } catch (\Exception $e) {
             \Log::error("Error in getAllAlumni: " . $e->getMessage());
@@ -313,5 +408,3 @@ class CompanyController extends Controller
         }
     }
 }
-
-

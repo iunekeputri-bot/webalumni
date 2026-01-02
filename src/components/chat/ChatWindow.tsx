@@ -22,7 +22,7 @@ interface ChatWindowProps {
   onTyping?: () => void;
 }
 
-export function ChatWindow({ activeConversation, messages, currentUserId, isLoading, onSendMessage, onDeleteConversation, onBack, isTyping = false, onTyping }: ChatWindowProps) {
+export function ChatWindow({ activeConversation, messages, currentUserId, isLoading, onSendMessage, onDeleteConversation, onBack, isTyping = false, onTyping, isOnline = false }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -99,7 +99,22 @@ export function ChatWindow({ activeConversation, messages, currentUserId, isLoad
           </Avatar>
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-white">{activeConversation.name}</h3>
-            {isTyping && <p className="text-xs text-indigo-500 font-medium animate-pulse">Typing...</p>}
+            {isTyping ? (
+              <p className="text-xs text-indigo-500 font-medium animate-pulse">Typing...</p>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                {isOnline ? (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                    <p className="text-xs text-green-600 font-medium">Online</p>
+                  </>
+                ) : activeConversation.last_seen_at ? (
+                  <p className="text-xs text-muted-foreground">
+                    Terakhir dilihat {new Date(activeConversation.last_seen_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
 

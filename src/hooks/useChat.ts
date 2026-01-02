@@ -32,6 +32,7 @@ export interface Conversation {
   last_message: string;
   last_message_time: string;
   unread_count: number;
+  last_seen_at?: string | null;
 }
 
 export function useChat(currentUserId: number | null) {
@@ -327,6 +328,35 @@ export function useChat(currentUserId: number | null) {
     };
   }, [currentUserId, fetchConversations]);
 
+  const [onlineUsers, setOnlineUsers] = useState<number[]>([]);
+
+  // Presence channel handling
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    // console.log("Joining global presence channel...");
+    const channel = echo.join('presence-global');
+
+    channel
+      .here((users: any[]) => {
+        // console.log("Users here:", users);
+        setOnlineUsers(users.map(u => u.id));
+      })
+      .joining((user: any) => {
+        // console.log("User joining:", user);
+        setOnlineUsers(prev => [...prev, user.id]);
+      })
+      .leaving((user: any) => {
+        // console.log("User leaving:", user);
+        setOnlineUsers(prev => prev.filter(id => id !== user.id));
+        fetchConversations(false);
+      });
+
+    return () => {
+      echo.leave('presence-global');
+    };
+  }, [currentUserId]);
+
   // Setup WebSocket listeners for messages
   useEffect(() => {
     if (!currentUserId || !activeConversation) {
@@ -334,7 +364,7 @@ export function useChat(currentUserId: number | null) {
       return;
     }
 
-    // Initial fetch for the active conversation - only once when conversation changes
+    // Initial fetch for the active conversation
     const loadMessages = async () => {
       await fetchMessages(activeConversation.user_id, true);
     };
@@ -352,7 +382,6 @@ export function useChat(currentUserId: number | null) {
         }
       }
 
-      // Update token before subscribing
       const token = localStorage.getItem("token");
       if (token) {
         updateEchoToken(token);
@@ -369,17 +398,13 @@ export function useChat(currentUserId: number | null) {
         // Add message if it's from the person we're chatting with
         if (currentActiveConvo && data.sender_id === currentActiveConvo.user_id) {
           setMessages((prev) => {
-            // Check if message already exists by ID or by content+time
             const exists = prev.some((msg) => {
               if (msg.id && data.id) return msg.id === data.id;
-              // Fallback check by content and sender
               return msg.sender_id === data.sender_id && msg.message === data.message && msg.receiver_id === data.receiver_id;
             });
             if (exists) {
-              console.log("Message already in list, skipping");
               return prev;
             }
-            console.log("Adding message from WebSocket to UI");
             return [...prev, data];
           });
         }
@@ -390,13 +415,11 @@ export function useChat(currentUserId: number | null) {
     }
 
     return () => {
-      // if (messagePollingIntervalRef.current) clearInterval(messagePollingIntervalRef.current);
       if (messageChannelRef.current) {
         try {
           if (typeof messageChannelRef.current.stopListening === "function") {
             messageChannelRef.current.stopListening("message.sent");
           }
-          // Leave the channel properly
           if (echo && typeof echo.leave === "function") {
             echo.leave(`chat.${currentUserId}`);
           }
@@ -418,5 +441,6 @@ export function useChat(currentUserId: number | null) {
     sendMessage,
     deleteConversation,
     refreshConversations: () => fetchConversations(false),
+    onlineUsers,
   };
 }
